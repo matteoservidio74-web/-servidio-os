@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#050807" />
+<meta name="servidio-bootstrap-version" content="9.2-single-file" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Servidio OS" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20100%20100'%3E%3Crect%20width%3D'100'%20height%3D'100'%20rx%3D'22'%20fill%3D'%252324e083'%2F%3E%3Ctext%20x%3D'50'%20y%3D'68'%20text-anchor%3D'middle'%20font-family%3D'Arial'%20font-size%3D'60'%20font-weight%3D'900'%20fill%3D'white'%3ES%3C%2Ftext%3E%3C%2Fsvg%3E" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20100%20100'%3E%3Crect%20width%3D'100'%20height%3D'100'%20rx%3D'22'%20fill%3D'%252324e083'%2F%3E%3Ctext%20x%3D'50'%20y%3D'68'%20text-anchor%3D'middle'%20font-family%3D'Arial'%20font-size%3D'60'%20font-weight%3D'900'%20fill%3D'white'%3ES%3C%2Ftext%3E%3C%2Fsvg%3E" />
+<title>Servidio OS</title>
+<style>
+html,body{margin:0;min-height:100%;background:#050807;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
+#boot{min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 0,#123524 0,#050807 48%)}
+.boot-card{width:min(420px,100%);text-align:center}.boot-logo{width:76px;height:76px;border-radius:24px;margin:0 auto 18px;background:linear-gradient(145deg,#2df093,#13b965);display:grid;place-items:center;font-size:40px;font-weight:950;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.35)}
+.boot-title{font-size:28px;font-weight:900}.boot-sub{margin-top:8px;color:rgba(255,255,255,.65);font-size:13px;line-height:1.45}.boot-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#24e083;margin:20px 4px;animation:p 1.1s infinite ease-in-out}.boot-dot:nth-child(2){animation-delay:.14s}.boot-dot:nth-child(3){animation-delay:.28s}@keyframes p{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1.15)}}
+.boot-err{color:#ffb9b9;margin-top:18px;font-size:13px;line-height:1.5}.boot-retry{margin-top:14px;border:0;background:#24e083;color:#fff;font-weight:900;border-radius:14px;padding:13px 18px}
+</style>
+</head>
+<body>
+<div id="boot"><div class="boot-card"><div class="boot-logo">S</div><div class="boot-title">Servidio OS</div><div class="boot-sub">Aggiornamento e sincronizzazione in corso…</div><div><span class="boot-dot"></span><span class="boot-dot"></span><span class="boot-dot"></span></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(()=>{
+'use strict';
+const SB_URL='https://rdxaxsosqiudklhvezuq.supabase.co';
+const SB_KEY='sb_publishable_abewBdHybtalh7RsfWbXUA_oOLebqMn';
+const RELEASE_URL=`${SB_URL}/rest/v1/app_releases?select=version,payload_b64,published_at&active=eq.true&order=published_at.desc&limit=1`;
+const CACHE_KEY='servidio_remote_release_cache_v1';
+let currentVersion='';
+function fail(msg){document.getElementById('boot').innerHTML=`<div class="boot-card"><div class="boot-logo">S</div><div class="boot-title">Servidio OS</div><div class="boot-err">${msg}</div><button class="boot-retry" onclick="location.reload()">Riprova</button></div>`}
+function b64bytes(s){const bin=atob(s);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u}
+async function unpack(b64){const ds=new DecompressionStream('gzip');const stream=new Blob([b64bytes(b64)]).stream().pipeThrough(ds);return JSON.parse(await new Response(stream).text())}
+async function remoteRelease(){const r=await fetch(RELEASE_URL,{cache:'no-store',headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}});if(!r.ok)throw new Error(`release ${r.status}`);const rows=await r.json();if(!rows?.[0])throw new Error('Nessuna release attiva');return rows[0]}
+async function loadRelease(){let rel=null;try{rel=await remoteRelease();localStorage.setItem(CACHE_KEY,JSON.stringify(rel))}catch(e){const c=localStorage.getItem(CACHE_KEY);if(c)rel=JSON.parse(c);else throw e}currentVersion=rel.version;const p=await unpack(rel.payload_b64);const doc=new DOMParser().parseFromString(p.index,'text/html');document.title=doc.title||'Servidio OS';document.body.innerHTML=doc.body.innerHTML;for(const st of [...doc.head.querySelectorAll('style')]){const el=document.createElement('style');el.textContent=st.textContent;document.head.appendChild(el)}if(p.css){const el=document.createElement('style');el.id='remote-release-css';el.textContent=p.css;document.head.appendChild(el)}const blob=new Blob([p.js],{type:'text/javascript'});const s=document.createElement('script');s.src=URL.createObjectURL(blob);s.onload=()=>URL.revokeObjectURL(s.src);document.body.appendChild(s)}
+async function checkVersion(){try{const rel=await remoteRelease();if(currentVersion&&rel.version!==currentVersion){localStorage.setItem(CACHE_KEY,JSON.stringify(rel));location.reload()}}catch{}}
+loadRelease().then(()=>{setInterval(checkVersion,5*60*1000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkVersion()});window.addEventListener('focus',checkVersion)}).catch(e=>fail('Impossibile caricare l’app. Controlla la connessione e riprova.'));
+})();
+</script>
+</body>
+</html>
