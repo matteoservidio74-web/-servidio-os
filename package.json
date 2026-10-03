@@ -1,0 +1,9 @@
+{
+  "name": "servidio-os",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "ai": "7.0.123"
+  }
+}
