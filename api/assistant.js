@@ -29,6 +29,7 @@ REGOLE OPERATIVE:
 - Aggiornamento stato lavori cantiere => site_update.
 - Appuntamento personale => event. Ricordami => reminder. Email => email_draft, non dichiarare invio.
 - Se il nome pronunciato assomiglia chiaramente a un cantiere presente nel context (es. Giusi/Giusy, Paoletto/Povoletto), usa il nome canonico del cantiere nel site_name.
+- site_name deve indicare un cantiere/cliente riconoscibile, NON una semplice località generica. Se l'utente cita un nuovo cliente e una località (es. 'Greta Campanella a Cividale') ma non esiste un cantiere con quel cliente, usa contact_name='Greta Campanella', site_name=null e conserva la località nei details. NON associare mai automaticamente a un altro cantiere solo perché ha la stessa città/località. Se una località corrisponde a più cantieri, site_name=null salvo che il cliente/cantiere sia identificato chiaramente.
 - Se manca il cantiere per una registrazione economica/operaio e non è deducibile con alta sicurezza, confidence<0.6 e needs_review=true: non inventarlo.
 - Per planning_item, open_job, inspection, receivable o task puoi lasciare site_name null se il lavoro/cliente non è ancora presente nei cantieri, ma conserva contact_name e dettagli.
 - Non trasformare comandi di modifica/eliminazione in note.
