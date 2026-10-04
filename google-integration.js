@@ -1,0 +1,27 @@
+(()=>{
+'use strict';
+const SB_URL='https://rdxaxsosqiudklhvezuq.supabase.co';
+const SB_KEY='sb_publishable_abewBdHybtalh7RsfWbXUA_oOLebqMn';
+const sb=window.supabase?.createClient?.(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+if(!sb)return;
+const FN=`${SB_URL}/functions/v1/google-connect`;
+const CALLBACK=`${SB_URL}/functions/v1/google-oauth-callback`;
+let busy=false,lastStatus=null;
+const $=(s,r=document)=>r.querySelector(s);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function ws(){return $('#workspaceSelect')?.value||null}
+function flash(msg,bad=false){let e=$('#mos-google-flash');if(!e){e=document.createElement('div');e.id='mos-google-flash';e.style.cssText='position:fixed;z-index:120;left:50%;bottom:110px;transform:translateX(-50%);max-width:88vw;padding:11px 14px;border-radius:14px;color:#fff;font:800 12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 12px 35px #0008';document.body.appendChild(e)}e.textContent=msg;e.style.background=bad?'#2a1014':'#0b2117';e.style.border='1px solid '+(bad?'#74313b':'#236c49');e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',3500)}
+async function invoke(body){const {data:{session}}=await sb.auth.getSession();if(!session?.access_token)throw new Error('Sessione scaduta');const r=await fetch(FN,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`,'apikey':SB_KEY},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.message||'Errore Google');return d}
+async function status(){try{lastStatus=await invoke({action:'status',workspace_id:ws()});return lastStatus}catch(e){return {configured:false,connection:{connected:false},error:String(e?.message||e)}}}
+function cardHtml(s){const c=s?.connection||{},connected=!!c.connected,configured=!!s?.configured;let state='';if(connected)state=`<div class="mos-google-state good"><b>✓ Google collegato</b><br>${esc(c.google_email||'Account Google')}<br><small>Calendar + invio Gmail autorizzati.</small></div>`;else if(configured)state='<div class="mos-google-state warn"><b>Configurazione pronta.</b><br>Manca solo il consenso del tuo account Google.</div>';else state='<div class="mos-google-state warn"><b>Manca la configurazione OAuth Google.</b><br>Inserisci una sola volta Client ID e Client Secret del progetto Google Cloud.</div>';
+const setup=!configured?`<div class="mos-google-fields"><div><label>Google OAuth Client ID</label><input id="mos-google-client-id" autocomplete="off" placeholder="…apps.googleusercontent.com"></div><div><label>Google OAuth Client Secret</label><input id="mos-google-client-secret" type="password" autocomplete="new-password" placeholder="Client secret"></div></div><button id="mos-google-save" class="mos-google-btn">Salva configurazione Google</button><div class="mos-google-help">Nel progetto Google Cloud usa questo callback OAuth:<span class="mos-google-code">${esc(CALLBACK)}</span></div>`:'';
+const connect=configured&&!connected?'<button id="mos-google-connect" class="mos-google-btn">Connetti il mio Google</button>':'';
+const done=connected?'<div class="mos-google-ok"><div class="mos-google-cap">📅 Calendar<br><b>pronto</b></div><div class="mos-google-cap">✉️ Gmail<br><b>invio pronto</b></div></div>':'';
+return `<div id="mos-google-card"><div class="mos-google-head"><div class="mos-google-icon">G</div><div><div class="mos-google-title">Google · Calendar e Gmail</div><div class="mos-google-sub">Collegamento diretto a Servidio OS</div></div></div>${state}${setup}${connect}${done}<div class="mos-google-help">Permessi richiesti: gestione eventi Calendar e invio email. Servidio OS non chiede accesso alla lettura della posta.</div></div>`}
+async function mount(){const body=$('#mos-body');if(!body)return;if(!$('#mos-save-settings'))return;if($('#mos-google-card'))return;const s=await status();const host=document.createElement('div');host.innerHTML=cardHtml(s);body.appendChild(host.firstElementChild);bind()}
+function bind(){const save=$('#mos-google-save');if(save)save.onclick=async()=>{if(busy)return;const cid=$('#mos-google-client-id')?.value?.trim(),secret=$('#mos-google-client-secret')?.value?.trim();if(!cid||!secret)return flash('Inserisci Client ID e Client Secret',true);busy=true;save.disabled=true;try{await invoke({action:'save_config',workspace_id:ws(),client_id:cid,client_secret:secret});flash('Configurazione Google salvata');$('#mos-google-card')?.remove();await mount()}catch(e){flash(String(e?.message||e),true)}finally{busy=false}};
+const con=$('#mos-google-connect');if(con)con.onclick=async()=>{if(busy)return;busy=true;con.disabled=true;try{const d=await invoke({action:'start',workspace_id:ws()});if(!d.url)throw new Error('URL Google mancante');location.href=d.url}catch(e){flash(String(e?.message||e),true);con.disabled=false;busy=false}}}
+const obs=new MutationObserver(()=>{if($('#mos-save-settings')&&!$('#mos-google-card'))mount()});obs.observe(document.documentElement,{childList:true,subtree:true});
+setInterval(()=>{if($('#mos-save-settings')&&!$('#mos-google-card'))mount()},1500);
+const q=new URLSearchParams(location.search);if(q.get('google')==='connected')setTimeout(()=>flash('Google collegato correttamente ✓'),1200);if(q.get('google')==='error')setTimeout(()=>flash('Collegamento Google non completato',true),1200);
+})();
