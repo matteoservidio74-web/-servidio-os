@@ -14,148 +14,85 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const visible=el=>{if(!el)return false;const r=el.getBoundingClientRect(),cs=getComputedStyle(el);return r.width>0&&r.height>0&&cs.display!=='none'&&cs.visibility!=='hidden'};
 const norm=s=>String(s||'').replace(/\s+/g,' ').trim();
 const isGreen=el=>{try{const m=getComputedStyle(el).color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);if(!m)return false;const r=+m[1],g=+m[2],b=+m[3];return g>105&&g>r*1.2&&g>b*1.05}catch{return false}};
+const fmtDate=v=>{if(!v)return'';try{return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(`${String(v).slice(0,10)}T12:00:00`))}catch{return String(v)}};
 
-function navLabelFrom(target){
-  let el=target;
-  for(let i=0;i<5&&el;i++,el=el.parentElement){
-    const r=el.getBoundingClientRect?.();
-    if(!r||r.top<innerHeight-240) continue;
-    const t=norm(el.textContent);
-    for(const name of ['Home','Cantieri','Preventivi','Squadra','Finanze','Altro']) if(t===name||t.endsWith(name)) return name;
-  }
-  return null;
-}
+function navLabelFrom(target){let el=target;for(let i=0;i<5&&el;i++,el=el.parentElement){const r=el.getBoundingClientRect?.();if(!r||r.top<innerHeight-240)continue;const t=norm(el.textContent);for(const name of ['Home','Cantieri','Preventivi','Squadra','Finanze','Altro'])if(t===name||t.endsWith(name))return name}return null}
+function detectHome(){if(S.forced!==null)return S.forced;const homeNodes=[...document.querySelectorAll('a,button,div,span')].filter(el=>visible(el)&&el.getBoundingClientRect().top>innerHeight-230&&norm(el.textContent)==='Home');if(homeNodes.some(el=>[el,el.parentElement,el.parentElement?.parentElement].filter(Boolean).some(x=>x.getAttribute?.('aria-current')==='page'||/active|selected|current|\bon\b/i.test(String(x.className||''))||isGreen(x))))return true;const topTexts=[...document.querySelectorAll('h1,h2,h3,div,span')].filter(el=>visible(el)&&el.getBoundingClientRect().top<390).map(el=>norm(el.textContent));return topTexts.some(t=>/^Oggi(?:$|\s*[·•-])/.test(t)||t==='OPERATIVITÀ')}
+function headerBottom(){const brands=[...document.querySelectorAll('div,span,p,h1,h2')].filter(el=>visible(el)&&el.getBoundingClientRect().top<190&&/^SERVIDIO RISTRUTTURA/i.test(norm(el.textContent)));let best=0;for(const brand of brands){let cur=brand;for(let i=0;i<8&&cur&&cur!==document.body;i++,cur=cur.parentElement){const r=cur.getBoundingClientRect();if(r.top<120&&r.bottom>170&&r.bottom<310&&r.width>innerWidth*.72)best=Math.max(best,r.bottom)}}if(best)return Math.ceil(best);const headers=[...document.querySelectorAll('header,[role="banner"],[class*="header"]')].filter(el=>visible(el)&&el.getBoundingClientRect().top<120&&el.getBoundingClientRect().bottom>170&&el.getBoundingClientRect().bottom<310&&el.getBoundingClientRect().width>innerWidth*.72);if(headers.length)return Math.ceil(Math.max(...headers.map(x=>x.getBoundingClientRect().bottom)));return Math.max(220,Math.min(270,Math.round(innerHeight*.142)))}
+function navTop(){const nodes=[...document.querySelectorAll('nav,footer,div')].filter(el=>{if(!visible(el))return false;const r=el.getBoundingClientRect(),p=getComputedStyle(el).position;return['fixed','sticky'].includes(p)&&r.bottom>=innerHeight-5&&r.height>=55&&r.height<180&&r.width>innerWidth*.78});return nodes.length?Math.min(...nodes.map(x=>x.getBoundingClientRect().top)):innerHeight-92}
 
-function detectHome(){
-  if(S.forced!==null) return S.forced;
-  const homeNodes=[...document.querySelectorAll('a,button,div,span')].filter(el=>visible(el)&&el.getBoundingClientRect().top>innerHeight-230&&norm(el.textContent)==='Home');
-  if(homeNodes.some(el=>[el,el.parentElement,el.parentElement?.parentElement].filter(Boolean).some(x=>x.getAttribute?.('aria-current')==='page'||/active|selected|current|\bon\b/i.test(String(x.className||''))||isGreen(x)))) return true;
-  const topTexts=[...document.querySelectorAll('h1,h2,h3,div,span')].filter(el=>visible(el)&&el.getBoundingClientRect().top<390).map(el=>norm(el.textContent));
-  return topTexts.some(t=>/^Oggi(?:$|\s*[·•-])/.test(t)||t==='OPERATIVITÀ');
-}
-
-function headerBottom(){
-  const brands=[...document.querySelectorAll('div,span,p,h1,h2')].filter(el=>visible(el)&&el.getBoundingClientRect().top<190&&/^SERVIDIO RISTRUTTURA/i.test(norm(el.textContent)));
-  let best=0;
-  for(const brand of brands){
-    let cur=brand;
-    for(let i=0;i<8&&cur&&cur!==document.body;i++,cur=cur.parentElement){
-      const r=cur.getBoundingClientRect();
-      if(r.top<120&&r.bottom>170&&r.bottom<310&&r.width>innerWidth*.72) best=Math.max(best,r.bottom);
-    }
-  }
-  if(best) return Math.ceil(best);
-  const headers=[...document.querySelectorAll('header,[role="banner"],[class*="header"]')].filter(el=>visible(el)&&el.getBoundingClientRect().top<120&&el.getBoundingClientRect().bottom>170&&el.getBoundingClientRect().bottom<310&&el.getBoundingClientRect().width>innerWidth*.72);
-  if(headers.length) return Math.ceil(Math.max(...headers.map(x=>x.getBoundingClientRect().bottom)));
-  return Math.max(220,Math.min(270,Math.round(innerHeight*.142)));
-}
-
-function navTop(){
-  const nodes=[...document.querySelectorAll('nav,footer,div')].filter(el=>{
-    if(!visible(el)) return false;
-    const r=el.getBoundingClientRect(),p=getComputedStyle(el).position;
-    return ['fixed','sticky'].includes(p)&&r.bottom>=innerHeight-5&&r.height>=55&&r.height<180&&r.width>innerWidth*.78;
-  });
-  return nodes.length?Math.min(...nodes.map(x=>x.getBoundingClientRect().top)):innerHeight-92;
-}
-
-async function identity(){
-  const {data:{session}}=await sb.auth.getSession();
-  if(!session?.user) return false;
-  S.user=session.user;
-  const {data}=await sb.from('workspace_members').select('workspace_id,role').eq('user_id',S.user.id);
-  S.workspaces=(data||[]).filter(x=>['owner','admin'].includes(x.role)).map(x=>x.workspace_id);
-  return S.workspaces.length>0;
-}
+async function identity(){const {data:{session}}=await sb.auth.getSession();if(!session?.user)return false;S.user=session.user;const {data}=await sb.from('workspace_members').select('workspace_id,role').eq('user_id',S.user.id);S.workspaces=(data||[]).filter(x=>['owner','admin'].includes(x.role)).map(x=>x.workspace_id);return S.workspaces.length>0}
 
 async function load(force=false){
-  if(S.loading) return S.loading;
-  if(!force&&S.data&&Date.now()-S.at<60000) return S.data;
+  if(S.loading)return S.loading;
+  if(!force&&S.data&&Date.now()-S.at<60000)return S.data;
   S.loading=(async()=>{
-    if(!S.user&&!(await identity())) return null;
-    const ids=S.workspaces,uid=S.user.id,now=new Date();
-    const y=now.getUTCFullYear(),m=now.getUTCMonth();
-    const monthStart=`${y}-${String(m+1).padStart(2,'0')}-01`;
-    const nextMonth=new Date(Date.UTC(y,m+1,1)).toISOString().slice(0,10);
-    const empty={data:[]};
+    if(!S.user&&!(await identity()))return null;
+    const ids=S.workspaces,uid=S.user.id,now=new Date(),y=now.getUTCFullYear(),m=now.getUTCMonth();
+    const monthStart=`${y}-${String(m+1).padStart(2,'0')}-01`,nextMonth=new Date(Date.UTC(y,m+1,1)).toISOString().slice(0,10),empty={data:[]};
     const [sitesQ,itemsQ,invoicesQ,costsQ,laborQ,receiptsQ]=await Promise.all([
       ids.length?sb.from('sites').select('id,name,client_name,location,status,contract_value,collected_amount,workspace_id').in('workspace_id',ids):Promise.resolve(empty),
-      sb.from('personal_items').select('id,item_type,title,details,status,amount,category,contact_name,site_id,workspace_id,metadata,created_at').eq('user_id',uid).neq('status','done').neq('status','cancelled').order('created_at',{ascending:false}).limit(400),
-      ids.length?sb.from('invoices').select('id,site_id,customer_name,number,amount,collected_amount,status,workspace_id,issue_date').in('workspace_id',ids).order('issue_date',{ascending:false}).limit(250):Promise.resolve(empty),
-      ids.length?sb.from('cost_entries').select('id,amount,entry_date,category,description,site_id,workspace_id,paid,due_date').in('workspace_id',ids).limit(1200):Promise.resolve(empty),
-      ids.length?sb.from('site_labor_adjustments').select('id,amount,paid,created_at,site_id,workspace_id,worker_name,period_label').in('workspace_id',ids).limit(1200):Promise.resolve(empty),
-      ids.length?sb.from('cash_receipts').select('id,amount,received_date,site_id,workspace_id,receipt_type').in('workspace_id',ids).gte('received_date',monthStart).lt('received_date',nextMonth).limit(700):Promise.resolve(empty)
+      sb.from('personal_items').select('id,item_type,title,details,status,amount,category,contact_name,site_id,workspace_id,metadata,created_at').eq('user_id',uid).neq('status','done').neq('status','cancelled').order('created_at',{ascending:false}).limit(500),
+      ids.length?sb.from('invoices').select('id,site_id,customer_name,number,amount,collected_amount,status,workspace_id,issue_date,notes').in('workspace_id',ids).order('issue_date',{ascending:false}).limit(350):Promise.resolve(empty),
+      ids.length?sb.from('cost_entries').select('id,amount,entry_date,category,description,site_id,workspace_id,paid,due_date').in('workspace_id',ids).limit(1800):Promise.resolve(empty),
+      ids.length?sb.from('site_labor_adjustments').select('id,amount,paid,created_at,site_id,workspace_id,worker_name,period_label,note').in('workspace_id',ids).limit(1800):Promise.resolve(empty),
+      ids.length?sb.from('cash_receipts').select('id,amount,received_date,site_id,workspace_id,receipt_type,note,invoice_id').in('workspace_id',ids).limit(1500):Promise.resolve(empty)
     ]);
 
     const sites=sitesQ.data||[],items=itemsQ.data||[],invoices=invoicesQ.data||[],costs=costsQ.data||[],labor=laborQ.data||[],receipts=receiptsQ.data||[];
+    const siteMap=new Map(sites.map(x=>[x.id,x]));
+    const siteLabel=id=>{const s=siteMap.get(id);return s?.client_name||s?.name||''};
     const openInvoices=invoices.filter(x=>Number(x.amount||0)-Number(x.collected_amount||0)>.009);
     const receivables=items.filter(x=>x.item_type==='receivable');
-    const dueNow=receivables.filter(x=>x.metadata?.due_state==='now');
-    const plannedIncome=receivables.filter(x=>x.metadata?.due_state!=='now');
+    const dueNow=receivables.filter(x=>x.metadata?.due_state==='now'),plannedIncome=receivables.filter(x=>x.metadata?.due_state!=='now');
+    const monthReceiptsRows=receipts.filter(x=>String(x.received_date||'')>=monthStart&&String(x.received_date||'')<nextMonth);
     const monthCosts=costs.filter(x=>String(x.entry_date||'')>=monthStart&&String(x.entry_date||'')<nextMonth&&x.paid!==false);
     const monthLabor=labor.filter(x=>String(x.created_at||'').slice(0,10)>=monthStart&&String(x.created_at||'').slice(0,10)<nextMonth&&x.paid!==false);
-    const materialMonth=monthCosts.filter(x=>String(x.category||'').toLowerCase()==='materials').reduce((s,x)=>s+Number(x.amount||0),0);
-    const laborMonth=monthLabor.reduce((s,x)=>s+Number(x.amount||0),0);
-    const otherMonth=monthCosts.filter(x=>String(x.category||'').toLowerCase()!=='materials').reduce((s,x)=>s+Number(x.amount||0),0);
-    const totalOutMonth=materialMonth+laborMonth+otherMonth;
-    const plannedCosts=costs.filter(x=>x.paid===false).reduce((s,x)=>s+Number(x.amount||0),0)+labor.filter(x=>x.paid===false).reduce((s,x)=>s+Number(x.amount||0),0);
-    const monthReceipts=receipts.reduce((s,x)=>s+Number(x.amount||0),0);
-    const collectedSites=sites.reduce((s,x)=>s+Number(x.collected_amount||0),0);
-    const invoiceDue=openInvoices.reduce((s,x)=>s+Number(x.amount||0)-Number(x.collected_amount||0),0);
-    const voiceDue=dueNow.reduce((s,x)=>s+Number(x.amount||0),0);
-    const futureIncome=plannedIncome.reduce((s,x)=>s+Number(x.amount||0),0);
-    const activeSites=sites.filter(x=>!['completed','closed','cancelled'].includes(String(x.status||'').toLowerCase()));
-    const completedSites=sites.filter(x=>String(x.status||'').toLowerCase()==='completed');
-    const siteMap=new Map(sites.map(x=>[x.id,x]));
-    const alerts=[];
-    for(const inv of openInvoices){
-      const site=siteMap.get(inv.site_id);const remaining=Number(inv.amount||0)-Number(inv.collected_amount||0);const finished=site&&String(site.status||'').toLowerCase()==='completed';
-      alerts.push({score:finished?100:80,title:inv.customer_name||site?.client_name||site?.name||'Fattura aperta',sub:`${finished?'Lavoro finito · ':''}da incassare ${money(remaining)}`,tag:'Incasso'});
-    }
-    for(const x of dueNow) alerts.push({score:90,title:x.contact_name||x.title,sub:`Da incassare ${x.amount?money(x.amount):'importo da definire'}`,tag:'Incasso'});
-    alerts.sort((a,b)=>b.score-a.score);
+    const materialRows=monthCosts.filter(x=>String(x.category||'').toLowerCase()==='materials');
+    const otherRows=monthCosts.filter(x=>String(x.category||'').toLowerCase()!=='materials');
+    const unpaidCostRows=costs.filter(x=>x.paid===false),unpaidLaborRows=labor.filter(x=>x.paid===false);
+    const materialMonth=materialRows.reduce((s,x)=>s+Number(x.amount||0),0),laborMonth=monthLabor.reduce((s,x)=>s+Number(x.amount||0),0),otherMonth=otherRows.reduce((s,x)=>s+Number(x.amount||0),0),totalOutMonth=materialMonth+laborMonth+otherMonth;
+    const plannedCosts=unpaidCostRows.reduce((s,x)=>s+Number(x.amount||0),0)+unpaidLaborRows.reduce((s,x)=>s+Number(x.amount||0),0);
+    const monthReceipts=monthReceiptsRows.reduce((s,x)=>s+Number(x.amount||0),0),collectedSites=sites.reduce((s,x)=>s+Number(x.collected_amount||0),0);
+    const invoiceDue=openInvoices.reduce((s,x)=>s+Number(x.amount||0)-Number(x.collected_amount||0),0),voiceDue=dueNow.reduce((s,x)=>s+Number(x.amount||0),0),futureIncome=plannedIncome.reduce((s,x)=>s+Number(x.amount||0),0);
+    const activeSites=sites.filter(x=>!['completed','closed','cancelled'].includes(String(x.status||'').toLowerCase())),completedSites=sites.filter(x=>String(x.status||'').toLowerCase()==='completed');
 
-    S.data={monthReceipts,collectedSites,invoiceDue,voiceDue,futureIncome,materialMonth,laborMonth,otherMonth,totalOutMonth,plannedCosts,activeSites:activeSites.length,completedSites:completedSites.length,alerts:alerts.slice(0,6)};
+    const receiptBySite=new Map();for(const r of receipts)receiptBySite.set(r.site_id,(receiptBySite.get(r.site_id)||0)+Number(r.amount||0));
+    const issues=sites.filter(s=>Number(s.collected_amount||0)>0&&Math.abs(Number(s.collected_amount||0)-(receiptBySite.get(s.id)||0))>.009).map(s=>({site:s.client_name||s.name,siteAmount:Number(s.collected_amount||0),receiptAmount:receiptBySite.get(s.id)||0,diff:Number(s.collected_amount||0)-(receiptBySite.get(s.id)||0)}));
+
+    const dueRows=[...openInvoices.map(x=>({title:x.customer_name||siteLabel(x.site_id)||`Fattura ${x.number||''}`,amount:Number(x.amount||0)-Number(x.collected_amount||0),detail:[x.number?`Fattura ${x.number}`:'',x.issue_date?fmtDate(x.issue_date):'',siteLabel(x.site_id)].filter(Boolean).join(' · ')})),...dueNow.map(x=>({title:x.contact_name||x.title,amount:Number(x.amount||0),detail:x.details||''}))];
+    const futureRows=plannedIncome.map(x=>({title:x.contact_name||x.title,amount:Number(x.amount||0),detail:[x.metadata?.due_when,x.details].filter(Boolean).join(' · ')}));
+    const collectedRows=sites.filter(x=>Number(x.collected_amount||0)>0).map(x=>({title:x.client_name||x.name,amount:Number(x.collected_amount||0),detail:[x.location,x.status].filter(Boolean).join(' · ')})).sort((a,b)=>b.amount-a.amount);
+    const receiptRows=monthReceiptsRows.map(x=>({title:siteLabel(x.site_id)||x.receipt_type||'Incasso',amount:Number(x.amount||0),detail:[fmtDate(x.received_date),x.note].filter(Boolean).join(' · ')})).sort((a,b)=>String(b.detail).localeCompare(String(a.detail)));
+    const materialDetail=materialRows.map(x=>({title:x.description||'Materiale',amount:Number(x.amount||0),detail:[fmtDate(x.entry_date),siteLabel(x.site_id)].filter(Boolean).join(' · ')}));
+    const laborDetail=monthLabor.map(x=>({title:x.worker_name||'Operaio',amount:Number(x.amount||0),detail:[x.period_label||fmtDate(x.created_at),siteLabel(x.site_id),x.note].filter(Boolean).join(' · ')}));
+    const otherDetail=otherRows.map(x=>({title:x.description||x.category||'Spesa',amount:Number(x.amount||0),detail:[fmtDate(x.entry_date),x.category,siteLabel(x.site_id)].filter(Boolean).join(' · ')}));
+    const plannedCostRows=[...unpaidCostRows.map(x=>({title:x.description||x.category||'Spesa prevista',amount:Number(x.amount||0),detail:[x.due_date?fmtDate(x.due_date):'',x.category,siteLabel(x.site_id)].filter(Boolean).join(' · ')})),...unpaidLaborRows.map(x=>({title:x.worker_name||'Operaio',amount:Number(x.amount||0),detail:[x.period_label,siteLabel(x.site_id)].filter(Boolean).join(' · ')}))];
+    const activeRows=activeSites.map(x=>({title:x.client_name||x.name,amount:null,detail:[x.location,x.status].filter(Boolean).join(' · ')})),completedRows=completedSites.map(x=>({title:x.client_name||x.name,amount:null,detail:[x.location,'Completato'].filter(Boolean).join(' · ')}));
+
+    const alerts=[];for(const inv of openInvoices){const site=siteMap.get(inv.site_id),remaining=Number(inv.amount||0)-Number(inv.collected_amount||0),finished=site&&String(site.status||'').toLowerCase()==='completed';alerts.push({score:finished?100:80,title:inv.customer_name||site?.client_name||site?.name||'Fattura aperta',sub:`${finished?'Lavoro finito · ':''}da incassare ${money(remaining)}`,tag:'Incasso'})}for(const x of dueNow)alerts.push({score:90,title:x.contact_name||x.title,sub:`Da incassare ${x.amount?money(x.amount):'importo da definire'}`,tag:'Incasso'});alerts.sort((a,b)=>b.score-a.score);
+
+    S.data={monthReceipts,collectedSites,invoiceDue,voiceDue,futureIncome,materialMonth,laborMonth,otherMonth,totalOutMonth,plannedCosts,activeSites:activeSites.length,completedSites:completedSites.length,alerts:alerts.slice(0,6),issues,details:{collected:collectedRows,due:dueRows,future:futureRows,plannedCosts:plannedCostRows,receipts:receiptRows,materials:materialDetail,labor:laborDetail,other:otherDetail,out:[...materialDetail,...laborDetail,...otherDetail],active:activeRows,completed:completedRows}};
     S.at=Date.now();return S.data;
   })().finally(()=>S.loading=null);
   return S.loading;
 }
 
-function metric(label,value,sub=''){return `<div class="fd-card"><span>${esc(label)}</span><b>${esc(value)}</b>${sub?`<small>${esc(sub)}</small>`:''}</div>`}
-function render(d){
-  if(!d) return '<div class="fd-loading">Caricamento dati…</div>';
-  const due=d.invoiceDue+d.voiceDue;
-  return `<div class="fd-head"><div><span>DASHBOARD AZIENDA</span><h2>Andamento economico</h2></div><button id="fd-refresh" aria-label="Aggiorna">↻</button></div>
-  <div class="fd-grid fd-main">${metric('Incassato cantieri',money(d.collectedSites),'Totale registrato sui cantieri')}${metric('Da incassare ora',money(due),d.invoiceDue?`${money(d.invoiceDue)} da fatture aperte`:'')}${metric('Incassi previsti',money(d.futureIncome),'Acconti e saldi futuri')}${metric('Spese previste',money(d.plannedCosts),'Costi registrati non ancora pagati')}</div>
-  <div class="fd-section"><h3>Questo mese</h3><div class="fd-grid">${metric('Incassi registrati',money(d.monthReceipts))}${metric('Uscite registrate',money(d.totalOutMonth))}${metric('Materiali',money(d.materialMonth))}${metric('Operai',money(d.laborMonth))}${metric('Altre spese',money(d.otherMonth))}${metric('Saldo mese',money(d.monthReceipts-d.totalOutMonth),'Incassi registrati meno uscite registrate')}</div></div>
-  <div class="fd-section"><h3>Stato lavori</h3><div class="fd-grid">${metric('Cantieri attivi',String(d.activeSites))}${metric('Cantieri conclusi',String(d.completedSites))}</div></div>
-  <div class="fd-section"><h3>Da tenere d’occhio</h3>${d.alerts.length?d.alerts.map(x=>`<div class="fd-alert"><div><b>${esc(x.title)}</b><span>${esc(x.sub)}</span></div><em>${esc(x.tag)}</em></div>`).join(''):'<div class="fd-empty">Nessuna situazione economica urgente.</div>'}</div>`;
-}
+function metric(key,label,value,sub=''){return `<button class="fd-card" data-detail="${key}"><span>${esc(label)}</span><b>${esc(value)}</b>${sub?`<small>${esc(sub)}</small>`:''}<i>Apri dettaglio ›</i></button>`}
+function render(d){if(!d)return'<div class="fd-loading">Caricamento dati…</div>';const due=d.invoiceDue+d.voiceDue;const warning=d.issues.length?`<button class="fd-warning" data-detail="issues"><b>⚠️ ${d.issues.length} dato${d.issues.length>1?'i':''} da verificare</b><span>I totali di alcuni cantieri non coincidono con il registro incassi. Tocca per controllare.</span></button>`:'';return `<div class="fd-head"><div><span>DASHBOARD AZIENDA</span><h2>Andamento economico</h2></div><button id="fd-refresh" aria-label="Aggiorna">↻</button></div>${warning}<div class="fd-grid fd-main">${metric('collected','Incassato cantieri',money(d.collectedSites),'Totale registrato sui cantieri')}${metric('due','Da incassare ora',money(due),d.invoiceDue?`${money(d.invoiceDue)} da fatture aperte`:'')}${metric('future','Incassi previsti',money(d.futureIncome),'Acconti e saldi futuri')}${metric('plannedCosts','Spese previste',money(d.plannedCosts),'Costi registrati non ancora pagati')}</div><div class="fd-section"><h3>Questo mese</h3><div class="fd-grid">${metric('receipts','Incassi registrati',money(d.monthReceipts))}${metric('out','Uscite registrate',money(d.totalOutMonth))}${metric('materials','Materiali',money(d.materialMonth))}${metric('labor','Operai',money(d.laborMonth))}${metric('other','Altre spese',money(d.otherMonth))}${metric('balance','Saldo mese',money(d.monthReceipts-d.totalOutMonth),'Incassi registrati meno uscite registrate')}</div></div><div class="fd-section"><h3>Stato lavori</h3><div class="fd-grid">${metric('active','Cantieri attivi',String(d.activeSites))}${metric('completed','Cantieri conclusi',String(d.completedSites))}</div></div><div class="fd-section"><h3>Da tenere d’occhio</h3>${d.alerts.length?d.alerts.map(x=>`<div class="fd-alert"><div><b>${esc(x.title)}</b><span>${esc(x.sub)}</span></div><em>${esc(x.tag)}</em></div>`).join(''):'<div class="fd-empty">Nessuna situazione economica urgente.</div>'}</div><div id="fd-modal" class="fd-modal" hidden><div class="fd-modal-card"><div class="fd-modal-head"><h3 id="fd-modal-title">Dettaglio</h3><button data-close-detail>×</button></div><div id="fd-modal-body"></div></div></div>`}
 
-function ensure(){
-  let d=document.getElementById('servidio-finance-home');
-  if(!d){
-    d=document.createElement('section');d.id='servidio-finance-home';d.hidden=true;document.body.appendChild(d);
-    d.addEventListener('click',async e=>{if(e.target?.id==='fd-refresh'){d.innerHTML='<div class="fd-loading">Aggiorno…</div>';S.at=0;d.innerHTML=render(await load(true));position()}});
-  }
-  return d;
-}
+const detailTitles={collected:'Incassato cantieri',due:'Da incassare ora',future:'Incassi previsti',plannedCosts:'Spese previste',receipts:'Incassi registrati questo mese',out:'Uscite registrate questo mese',materials:'Spese materiali',labor:'Costi operai',other:'Altre spese',active:'Cantieri attivi',completed:'Cantieri conclusi',issues:'Dati da verificare',balance:'Saldo del mese'};
+function rowsHtml(rows){if(!rows?.length)return'<div class="fd-empty">Nessuna voce registrata.</div>';return rows.map(x=>`<div class="fd-detail-row"><div><b>${esc(x.title)}</b>${x.detail?`<span>${esc(x.detail)}</span>`:''}</div>${x.amount!==null&&x.amount!==undefined?`<strong>${money(x.amount)}</strong>`:''}</div>`).join('')}
+function openDetail(key){const d=S.data;if(!d)return;const modal=document.getElementById('fd-modal'),title=document.getElementById('fd-modal-title'),body=document.getElementById('fd-modal-body');if(!modal||!title||!body)return;title.textContent=detailTitles[key]||'Dettaglio';if(key==='issues')body.innerHTML=d.issues.length?d.issues.map(x=>`<div class="fd-issue"><b>${esc(x.site)}</b><span>Scheda cantiere: ${money(x.siteAmount)}</span><span>Registro incassi: ${money(x.receiptAmount)}</span><strong>Differenza: ${money(x.diff)}</strong></div>`).join(''):'<div class="fd-empty">Nessuna discrepanza.</div>';else if(key==='balance')body.innerHTML=`<div class="fd-balance"><span>Incassi registrati</span><b>${money(d.monthReceipts)}</b><span>Uscite registrate</span><b>− ${money(d.totalOutMonth)}</b><hr><span>Saldo</span><strong>${money(d.monthReceipts-d.totalOutMonth)}</strong></div>`;else body.innerHTML=rowsHtml(d.details[key]);modal.hidden=false}
+function closeDetail(){const m=document.getElementById('fd-modal');if(m)m.hidden=true}
+
+function ensure(){let d=document.getElementById('servidio-finance-home');if(!d){d=document.createElement('section');d.id='servidio-finance-home';d.hidden=true;document.body.appendChild(d);d.addEventListener('click',async e=>{if(e.target?.closest('#fd-refresh')){d.innerHTML='<div class="fd-loading">Aggiorno…</div>';S.at=0;d.innerHTML=render(await load(true));position();return}const detail=e.target?.closest('[data-detail]');if(detail){openDetail(detail.dataset.detail);return}if(e.target?.closest('[data-close-detail]')||e.target?.id==='fd-modal')closeDetail()})}return d}
 function position(){const d=document.getElementById('servidio-finance-home');if(!d||d.hidden)return;d.style.top=`${headerBottom()}px`;d.style.bottom=`${Math.max(74,innerHeight-navTop())}px`}
 async function show(){const d=ensure();d.hidden=false;position();if(!S.data)d.innerHTML='<div class="fd-loading">Caricamento dashboard…</div>';d.innerHTML=render(await load(false));position()}
 function hide(){const d=document.getElementById('servidio-finance-home');if(d)d.hidden=true}
 function sync(){detectHome()?show():hide()}
 
-const style=document.createElement('style');
-style.textContent=`#servidio-finance-home{position:fixed;left:0;right:0;z-index:2147482000!important;background:#f4fbf7;color:#092d1e;overflow:auto;padding:18px 18px 34px;box-sizing:border-box;border-top:1px solid #d7eee2;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;pointer-events:auto}#servidio-finance-home[hidden]{display:none!important}#mos-talk,#mos-chat{z-index:2147483000!important}#mos-toast{z-index:2147483001!important}.fd-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.fd-head span{font-size:10px;letter-spacing:.18em;font-weight:900;color:#21c77a}.fd-head h2{font-size:25px;margin:4px 0 0;font-weight:950}.fd-head button{width:40px;height:40px;border-radius:13px;border:1px solid #bfe4d1;background:#fff;color:#087442;font-size:20px}.fd-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.fd-main{margin-bottom:13px}.fd-card{background:#fff;border:1px solid #c9e8d8;border-radius:17px;padding:13px;min-height:82px;box-sizing:border-box}.fd-card span{display:block;font-size:11px;color:#607b6d;font-weight:800}.fd-card b{display:block;font-size:21px;color:#0a623a;margin-top:6px;line-height:1.05}.fd-card small{display:block;font-size:9px;color:#819489;margin-top:5px;line-height:1.3}.fd-section{margin-top:13px;background:#fff;border:1px solid #c9e8d8;border-radius:19px;padding:13px}.fd-section h3{margin:0 0 10px;font-size:16px}.fd-section .fd-card{background:#f8fcfa}.fd-alert{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #edf6f1}.fd-alert:first-of-type{border-top:0}.fd-alert b{display:block;font-size:13px}.fd-alert span{display:block;margin-top:3px;color:#70857a;font-size:11px;line-height:1.35}.fd-alert em{height:max-content;font-style:normal;background:#e8f8ef;color:#128956;border-radius:999px;padding:4px 7px;font-size:9px;font-weight:900;white-space:nowrap}.fd-empty,.fd-loading{text-align:center;padding:24px;color:#778d81;font-weight:700}@media(max-width:390px){#servidio-finance-home{padding-left:14px;padding-right:14px}.fd-head h2{font-size:22px}.fd-card b{font-size:18px}}`;
-document.head.appendChild(style);
+const style=document.createElement('style');style.textContent=`#servidio-finance-home{position:fixed;left:0;right:0;z-index:2147482000!important;background:#f4fbf7;color:#092d1e;overflow:auto;padding:18px 18px 34px;box-sizing:border-box;border-top:1px solid #d7eee2;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;isolation:isolate;pointer-events:auto}#servidio-finance-home[hidden],.fd-modal[hidden]{display:none!important}#mos-talk,#mos-chat{z-index:2147483000!important}#mos-toast{z-index:2147483001!important}.fd-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.fd-head span{font-size:10px;letter-spacing:.18em;font-weight:900;color:#21c77a}.fd-head h2{font-size:25px;margin:4px 0 0;font-weight:950}.fd-head button{width:40px;height:40px;border-radius:13px;border:1px solid #bfe4d1;background:#fff;color:#087442;font-size:20px}.fd-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.fd-main{margin-bottom:13px}.fd-card{appearance:none;text-align:left;background:#fff;border:1px solid #c9e8d8;border-radius:17px;padding:13px;min-height:94px;box-sizing:border-box;color:inherit}.fd-card span{display:block;font-size:11px;color:#607b6d;font-weight:800}.fd-card b{display:block;font-size:21px;color:#0a623a;margin-top:6px;line-height:1.05}.fd-card small{display:block;font-size:9px;color:#819489;margin-top:5px;line-height:1.3}.fd-card i{display:block;font-style:normal;font-size:9px;color:#1a9b61;margin-top:7px;font-weight:900}.fd-section{margin-top:13px;background:#fff;border:1px solid #c9e8d8;border-radius:19px;padding:13px}.fd-section h3{margin:0 0 10px;font-size:16px}.fd-section .fd-card{background:#f8fcfa}.fd-warning{width:100%;text-align:left;border:1px solid #e6c46c;background:#fff8df;color:#634b09;border-radius:15px;padding:11px;margin-bottom:12px}.fd-warning b,.fd-warning span{display:block}.fd-warning span{font-size:10px;margin-top:3px}.fd-alert{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #edf6f1}.fd-alert:first-of-type{border-top:0}.fd-alert b{display:block;font-size:13px}.fd-alert span{display:block;margin-top:3px;color:#70857a;font-size:11px;line-height:1.35}.fd-alert em{height:max-content;font-style:normal;background:#e8f8ef;color:#128956;border-radius:999px;padding:4px 7px;font-size:9px;font-weight:900;white-space:nowrap}.fd-empty,.fd-loading{text-align:center;padding:24px;color:#778d81;font-weight:700}.fd-modal{position:fixed;inset:0;background:#0008;z-index:2147482500;display:flex;align-items:flex-end;justify-content:center}.fd-modal-card{width:100%;max-height:78vh;overflow:auto;background:#f7fcf9;border-radius:24px 24px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom));box-sizing:border-box}.fd-modal-head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:-16px;background:#f7fcf9;padding:12px 0;z-index:2}.fd-modal-head h3{margin:0;font-size:20px}.fd-modal-head button{border:0;background:#e9f3ee;border-radius:50%;width:38px;height:38px;font-size:24px;color:#143d2a}.fd-detail-row,.fd-issue{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #deede5;padding:12px 0}.fd-detail-row:first-child,.fd-issue:first-child{border-top:0}.fd-detail-row div{min-width:0}.fd-detail-row b,.fd-detail-row span,.fd-issue b,.fd-issue span,.fd-issue strong{display:block}.fd-detail-row b{font-size:13px}.fd-detail-row span{font-size:11px;color:#70857a;margin-top:3px}.fd-detail-row strong{font-size:13px;color:#087442;white-space:nowrap}.fd-issue{display:block}.fd-issue b{font-size:14px;margin-bottom:5px}.fd-issue span{font-size:12px;color:#61766a;margin-top:2px}.fd-issue strong{font-size:13px;color:#9a5d00;margin-top:6px}.fd-balance{display:grid;grid-template-columns:1fr auto;gap:10px;padding:8px 0}.fd-balance hr{grid-column:1/-1;width:100%;border:0;border-top:1px solid #dcebe3}.fd-balance strong{color:#087442;font-size:20px}@media(max-width:390px){#servidio-finance-home{padding-left:14px;padding-right:14px}.fd-head h2{font-size:22px}.fd-card b{font-size:18px}}`;document.head.appendChild(style);
 
-document.addEventListener('click',e=>{
-  const label=navLabelFrom(e.target);
-  if(label){S.forced=label==='Home';setTimeout(sync,40)}
-},true);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){S.at=0;S.forced=null;setTimeout(sync,80)}});
-window.addEventListener('resize',position);
-let mt;
-new MutationObserver(records=>{if(records.every(r=>r.target?.closest?.('#servidio-finance-home')))return;clearTimeout(mt);mt=setTimeout(()=>{if(S.forced===null)sync();else if(S.forced)position()},120)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','aria-current']});
-setTimeout(sync,450);setTimeout(sync,1100);setTimeout(sync,2200);
+document.addEventListener('click',e=>{const label=navLabelFrom(e.target);if(label){S.forced=label==='Home';setTimeout(sync,40)}},true);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){S.at=0;S.forced=null;setTimeout(sync,80)}});window.addEventListener('resize',position);let mt;new MutationObserver(records=>{if(records.every(r=>r.target?.closest?.('#servidio-finance-home')))return;clearTimeout(mt);mt=setTimeout(()=>{if(S.forced===null)sync();else if(S.forced)position()},120)}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','aria-current']});setTimeout(sync,450);setTimeout(sync,1100);setTimeout(sync,2200);
 })();
