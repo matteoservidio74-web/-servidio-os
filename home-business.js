@@ -30,16 +30,17 @@ async function load(force=false){
     if(!S.user&&!(await identity()))return null;
     const ids=S.workspaces,uid=S.user.id,now=new Date(),y=now.getUTCFullYear(),m=now.getUTCMonth();
     const monthStart=`${y}-${String(m+1).padStart(2,'0')}-01`,nextMonth=new Date(Date.UTC(y,m+1,1)).toISOString().slice(0,10),empty={data:[]};
-    const [sitesQ,itemsQ,invoicesQ,costsQ,laborQ,receiptsQ]=await Promise.all([
+    const [sitesQ,itemsQ,invoicesQ,costsQ,laborQ,timeQ,receiptsQ]=await Promise.all([
       ids.length?sb.from('sites').select('id,name,client_name,location,status,contract_value,collected_amount,workspace_id').in('workspace_id',ids):Promise.resolve(empty),
       sb.from('personal_items').select('id,item_type,title,details,status,amount,category,contact_name,site_id,workspace_id,metadata,created_at').eq('user_id',uid).neq('status','done').neq('status','cancelled').order('created_at',{ascending:false}).limit(500),
       ids.length?sb.from('invoices').select('id,site_id,customer_name,number,amount,collected_amount,status,workspace_id,issue_date,notes').in('workspace_id',ids).order('issue_date',{ascending:false}).limit(350):Promise.resolve(empty),
       ids.length?sb.from('cost_entries').select('id,amount,entry_date,category,description,site_id,workspace_id,paid,due_date').in('workspace_id',ids).limit(1800):Promise.resolve(empty),
       ids.length?sb.from('site_labor_adjustments').select('id,amount,paid,created_at,site_id,workspace_id,worker_name,period_label,note').in('workspace_id',ids).limit(1800):Promise.resolve(empty),
+      ids.length?sb.from('time_entries').select('id,work_date,hours,hourly_cost,payable_hours,cost_amount_override,payment_status,is_payable,site_id,workspace_id,worker_name_snapshot,note').in('workspace_id',ids).limit(1800):Promise.resolve(empty),
       ids.length?sb.from('cash_receipts').select('id,amount,received_date,site_id,workspace_id,receipt_type,note,invoice_id').in('workspace_id',ids).limit(1500):Promise.resolve(empty)
     ]);
 
-    const sites=sitesQ.data||[],items=itemsQ.data||[],invoices=invoicesQ.data||[],costs=costsQ.data||[],labor=laborQ.data||[],receipts=receiptsQ.data||[];
+    const sites=sitesQ.data||[],items=itemsQ.data||[],invoices=invoicesQ.data||[],costs=costsQ.data||[],labor=laborQ.data||[],timeEntries=timeQ.data||[],receipts=receiptsQ.data||[];
     const siteMap=new Map(sites.map(x=>[x.id,x]));
     const siteLabel=id=>{const s=siteMap.get(id);return s?.client_name||s?.name||''};
     const openInvoices=invoices.filter(x=>Number(x.amount||0)-Number(x.collected_amount||0)>.009);
@@ -48,10 +49,12 @@ async function load(force=false){
     const monthReceiptsRows=receipts.filter(x=>String(x.received_date||'')>=monthStart&&String(x.received_date||'')<nextMonth);
     const monthCosts=costs.filter(x=>String(x.entry_date||'')>=monthStart&&String(x.entry_date||'')<nextMonth&&x.paid!==false);
     const monthLabor=labor.filter(x=>String(x.created_at||'').slice(0,10)>=monthStart&&String(x.created_at||'').slice(0,10)<nextMonth&&x.paid!==false);
+    const monthTime=timeEntries.filter(x=>String(x.work_date||'')>=monthStart&&String(x.work_date||'')<nextMonth&&x.is_payable!==false);
+    const timeCost=x=>Number(x.cost_amount_override??(Number(x.payable_hours??x.hours||0)*Number(x.hourly_cost||0)));
     const materialRows=monthCosts.filter(x=>String(x.category||'').toLowerCase()==='materials');
     const otherRows=monthCosts.filter(x=>String(x.category||'').toLowerCase()!=='materials');
     const unpaidCostRows=costs.filter(x=>x.paid===false),unpaidLaborRows=labor.filter(x=>x.paid===false);
-    const materialMonth=materialRows.reduce((s,x)=>s+Number(x.amount||0),0),laborMonth=monthLabor.reduce((s,x)=>s+Number(x.amount||0),0),otherMonth=otherRows.reduce((s,x)=>s+Number(x.amount||0),0),totalOutMonth=materialMonth+laborMonth+otherMonth;
+    const materialMonth=materialRows.reduce((s,x)=>s+Number(x.amount||0),0),laborMonth=monthLabor.reduce((s,x)=>s+Number(x.amount||0),0)+monthTime.reduce((s,x)=>s+timeCost(x),0),otherMonth=otherRows.reduce((s,x)=>s+Number(x.amount||0),0),totalOutMonth=materialMonth+laborMonth+otherMonth;
     const plannedCosts=unpaidCostRows.reduce((s,x)=>s+Number(x.amount||0),0)+unpaidLaborRows.reduce((s,x)=>s+Number(x.amount||0),0);
     const monthReceipts=monthReceiptsRows.reduce((s,x)=>s+Number(x.amount||0),0),collectedSites=sites.reduce((s,x)=>s+Number(x.collected_amount||0),0);
     const invoiceDue=openInvoices.reduce((s,x)=>s+Number(x.amount||0)-Number(x.collected_amount||0),0),voiceDue=dueNow.reduce((s,x)=>s+Number(x.amount||0),0),futureIncome=plannedIncome.reduce((s,x)=>s+Number(x.amount||0),0);
@@ -65,7 +68,7 @@ async function load(force=false){
     const collectedRows=sites.filter(x=>Number(x.collected_amount||0)>0).map(x=>({title:x.client_name||x.name,amount:Number(x.collected_amount||0),detail:[x.location,x.status].filter(Boolean).join(' · ')})).sort((a,b)=>b.amount-a.amount);
     const receiptRows=monthReceiptsRows.map(x=>({title:siteLabel(x.site_id)||x.receipt_type||'Incasso',amount:Number(x.amount||0),detail:[fmtDate(x.received_date),x.note].filter(Boolean).join(' · ')})).sort((a,b)=>String(b.detail).localeCompare(String(a.detail)));
     const materialDetail=materialRows.map(x=>({title:x.description||'Materiale',amount:Number(x.amount||0),detail:[fmtDate(x.entry_date),siteLabel(x.site_id)].filter(Boolean).join(' · ')}));
-    const laborDetail=monthLabor.map(x=>({title:x.worker_name||'Operaio',amount:Number(x.amount||0),detail:[x.period_label||fmtDate(x.created_at),siteLabel(x.site_id),x.note].filter(Boolean).join(' · ')}));
+    const laborDetail=[...monthLabor.map(x=>({title:x.worker_name||'Operaio',amount:Number(x.amount||0),detail:[x.period_label||fmtDate(x.created_at),siteLabel(x.site_id),x.note].filter(Boolean).join(' · ')})),...monthTime.map(x=>({title:x.worker_name_snapshot||'Operaio',amount:timeCost(x),detail:[fmtDate(x.work_date),siteLabel(x.site_id),`${Number(x.hours||0)} ore`,x.payment_status==='unpaid'?'Da pagare':'Pagato',x.note].filter(Boolean).join(' · ')}))];
     const otherDetail=otherRows.map(x=>({title:x.description||x.category||'Spesa',amount:Number(x.amount||0),detail:[fmtDate(x.entry_date),x.category,siteLabel(x.site_id)].filter(Boolean).join(' · ')}));
     const plannedCostRows=[...unpaidCostRows.map(x=>({title:x.description||x.category||'Spesa prevista',amount:Number(x.amount||0),detail:[x.due_date?fmtDate(x.due_date):'',x.category,siteLabel(x.site_id)].filter(Boolean).join(' · ')})),...unpaidLaborRows.map(x=>({title:x.worker_name||'Operaio',amount:Number(x.amount||0),detail:[x.period_label,siteLabel(x.site_id)].filter(Boolean).join(' · ')}))];
     const activeRows=activeSites.map(x=>({title:x.client_name||x.name,amount:null,detail:[x.location,x.status].filter(Boolean).join(' · ')})),completedRows=completedSites.map(x=>({title:x.client_name||x.name,amount:null,detail:[x.location,'Completato'].filter(Boolean).join(' · ')}));
