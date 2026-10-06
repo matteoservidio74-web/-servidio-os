@@ -50,7 +50,7 @@ async function load(force=false){
     const monthCosts=costs.filter(x=>String(x.entry_date||'')>=monthStart&&String(x.entry_date||'')<nextMonth&&x.paid!==false);
     const monthLabor=labor.filter(x=>String(x.created_at||'').slice(0,10)>=monthStart&&String(x.created_at||'').slice(0,10)<nextMonth&&x.paid!==false);
     const monthTime=timeEntries.filter(x=>String(x.work_date||'')>=monthStart&&String(x.work_date||'')<nextMonth&&x.is_payable!==false);
-    const timeCost=x=>Number(x.cost_amount_override??(Number(x.payable_hours??x.hours||0)*Number(x.hourly_cost||0)));
+    const timeCost=x=>Number(x.cost_amount_override??(Number((x.payable_hours??x.hours)||0)*Number(x.hourly_cost||0)));
     const materialRows=monthCosts.filter(x=>String(x.category||'').toLowerCase()==='materials');
     const otherRows=monthCosts.filter(x=>String(x.category||'').toLowerCase()!=='materials');
     const unpaidCostRows=costs.filter(x=>x.paid===false),unpaidLaborRows=labor.filter(x=>x.paid===false);
