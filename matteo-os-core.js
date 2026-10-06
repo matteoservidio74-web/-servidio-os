@@ -76,7 +76,7 @@ function normalizeActions(actions){
 }
 
 async function applyAction(a){
-  if(['labor_entry','material_request','income_entry','business_expense'].includes(a.type))return serverAction(a);
+  if(['labor_entry','labor_payment_update','material_request','income_entry','business_expense'].includes(a.type))return serverAction(a);
   const site=siteByName(a.site_name),targetWs=site?.workspace_id||S.workspace;
   if(a.type==='business_schedule'){
     if(!a.due_at)throw new Error('schedule_date');
