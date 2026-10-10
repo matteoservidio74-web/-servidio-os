@@ -13,13 +13,31 @@ globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,home,finance,workedH
 const nodes = new Map();
 const calls = [];
 const inserts = [];
+const updates = [];
+const loggedErrors = [];
+const materialRecords = new Map();
+let updateError = null;
+let confirmResult = true;
 class FixedDate extends Date {constructor(...args){super(...(args.length?args:['2026-10-10T12:00:00Z']))}static now(){return new Date('2026-10-10T12:00:00Z').getTime()}}
 let rpcError = null;
-const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcError}},from:table=>({insert:async row=>{inserts.push({table,row});return {error:null}}})};
+const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcError}},from:table=>({
+ insert:async row=>{inserts.push({table,row});return {error:null}},
+ update:row=>{
+  const filters=[];
+  const query={eq:(key,value)=>{filters.push([key,value]);return query},select:()=>query,maybeSingle:async()=>{
+   updates.push({table,row,filters});
+   if(updateError)return {data:null,error:updateError};
+   const found=Array.from(materialRecords.values()).find(record=>filters.every(([key,value])=>record[key]===value));
+   if(!found)return {data:null,error:null};
+   Object.assign(found,row);return {data:{id:found.id},error:null};
+  }};
+  return query;
+ }
+})};
 const context = vm.createContext({
  window:{supabase:{createClient:()=>sb}},
  document:{querySelector:s=>{if(!nodes.has(s))nodes.set(s,{innerHTML:'',textContent:'',addEventListener(){},classList:{add(){},remove(){}}});return nodes.get(s)}},
- Intl,Date:FixedDate,console:{...console,error:e=>{if(e?.message!=='Simulated network failure')throw e}},setTimeout:()=>0,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000123'},
+ Intl,Date:FixedDate,console:{...console,error:e=>loggedErrors.push(e?.message)},setTimeout:()=>0,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000123'},confirm:()=>confirmResult,
  FormData:class {constructor(form){this.data=form.data}entries(){return Object.entries(this.data)}}
 });
 vm.runInContext(source,context);
@@ -97,6 +115,7 @@ assert.doesNotMatch(programHtml,/Prossimi impegni/);
 const lowerSection=programHtml.slice(programHtml.indexOf('<h2>Promemoria e materiali</h2>'));
 for(const text of ['Ordina rasante','Telefonare al cliente senza scadenza','Senza scadenza','Rasante da acquistare','5 sacchi','Per la fase 1','Cliente Esempio A'])assert.ok(lowerSection.includes(text),text);
 assert.doesNotMatch(lowerSection,/Inizio lavoro|Acconto previsto|Materiale già acquistato/);
+for(const action of ['appEditMaterial','appCompleteMaterial','appDeleteMaterial'])assert.ok(lowerSection.includes(`${action}('purchase-request')`),action);
 assert.match(programHtml,/Lavori da iniziare/);assert.match(programHtml,/Lavori in corso/);assert.match(programHtml,/Calendario della settimana/);
 assert.equal(app.reminderEvents().length,2);
 
@@ -125,6 +144,53 @@ assert.equal(app.reminderEvents().length,2);
  assert.equal(inserts[0].row.site_id,'giusy');assert.equal(inserts[0].row.quantity,5);assert.equal(inserts[0].row.status,'requested');
  assert.equal(S.tab,'week');
  assert.match(app.addPage(),/Programma → Promemoria e materiali/);
+ // Material edits update the same row, retain its history and appear at the new site.
+ for(const record of S.materials)materialRecords.set(record.id,{...record,workspace_id:'jessica',requested_by:'owner',priority:'normal'});
+ materialRecords.set('delete-request',{id:'delete-request',workspace_id:'jessica',site_id:'giusy',item:'Profilo da eliminare',status:'requested'});
+ app.setLoad(async()=>{S.materials=Array.from(materialRecords.values()).filter(x=>x.workspace_id===S.workspace&&x.status==='requested').map(x=>({...x}))});
+ const financesBefore=JSON.stringify([S.hours,S.laborAdjustments,S.costs,S.receipts,S.invoices,S.items]);
+ context.window.appEditMaterial('purchase-request');
+ assert.equal(S.form,'material');assert.equal(S.editMaterialId,'purchase-request');
+ formHtml=app.addPage();
+ for(const value of ['value="Rasante da acquistare"','value="5"','value="sacchi"','value="Per la fase 1"','value="giusy" selected','Salva modifiche'])assert.ok(formHtml.includes(value),value);
+ form.data={item:'Rasante aggiornato',quantity:'6.5',unit:'sacchi',site_id:s.id,note:'Seconda fase'};
+ await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(inserts.length,1);assert.equal(updates.length,1);
+ assert.deepEqual(updates[0].filters,[['id','purchase-request'],['workspace_id','jessica'],['status','requested']]);
+ assert.equal(materialRecords.get('purchase-request').quantity,6.5);
+ assert.equal(materialRecords.get('purchase-request').requested_by,'owner');
+ assert.equal(S.editMaterialId,null);assert.equal(S.tab,'week');
+ assert.match(app.siteDetailPage(s),/Rasante aggiornato/);
+ assert.match(app.remindersAndMaterials(),/6.5 sacchi/);
+ // Invalid edits, stale records and transport errors do not claim success or create duplicates.
+ context.window.appEditMaterial('purchase-request');
+ form.data.quantity='-1';await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(updates.length,1);assert.equal(S.editMaterialId,'purchase-request');assert.equal(button.disabled,false);
+ form.data.quantity='7';form.data.site_id='another-company';await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(updates.length,1);form.data.site_id=s.id;
+ updateError={message:'Simulated network failure'};await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(S.editMaterialId,'purchase-request');assert.equal(button.textContent,'Salva modifiche');
+ updateError=null;materialRecords.get('purchase-request').status='purchased';
+ await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(S.editMaterialId,'purchase-request');assert.equal(inserts.length,1);
+ materialRecords.get('purchase-request').status='requested';await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(S.editMaterialId,null);assert.equal(materialRecords.get('purchase-request').quantity,7);
+ // Completion and deletion remove pending rows from every loaded section, without creating a cost.
+ await context.window.appCompleteMaterial('purchase-request');
+ assert.equal(materialRecords.get('purchase-request').status,'purchased');
+ assert.equal(materialRecords.get('purchase-request').purchased_by,'owner');
+ assert.equal(materialRecords.get('purchase-request').resolved_at,materialRecords.get('purchase-request').purchased_at);
+ assert.doesNotMatch(app.remindersAndMaterials(),/Rasante aggiornato/);
+ assert.doesNotMatch(app.siteDetailPage(s),/Rasante aggiornato/);
+ let updateCount=updates.length;confirmResult=false;await context.window.appDeleteMaterial('delete-request');
+ assert.equal(updates.length,updateCount);assert.equal(materialRecords.get('delete-request').status,'requested');
+ confirmResult=true;await context.window.appDeleteMaterial('delete-request');
+ assert.equal(materialRecords.get('delete-request').status,'cancelled');assert.ok(materialRecords.has('delete-request'));
+ assert.doesNotMatch(app.remindersAndMaterials(),/Profilo da eliminare/);
+ updateCount=updates.length;await context.window.appCompleteMaterial('foreign-or-missing-id');assert.equal(updates.length,updateCount);
+ assert.equal(JSON.stringify([S.hours,S.laborAdjustments,S.costs,S.receipts,S.invoices,S.items]),financesBefore);
+ assert.ok(updates.every(x=>x.table==='material_requests'&&x.filters.some(([key,value])=>key==='workspace_id'&&value==='jessica')));
+ assert.deepEqual(loggedErrors,['Simulated network failure','La quantità deve essere un numero maggiore o uguale a zero','Seleziona un cantiere dell’azienda attuale','Simulated network failure','Il materiale è già stato aggiornato o non è più disponibile. Ricarica la pagina.','Il materiale non è più disponibile. Ricarica la pagina.']);
  // The old company's financial records must not remain clickable during a switch.
  S.workspaces=[{id:'one',name:'Example One'},{id:'two',name:'Example Two'}];S.workspace='one';S.tab='sites';
  let finishLoad;app.setLoad(()=>new Promise(resolve=>{finishLoad=resolve}));
@@ -134,5 +200,5 @@ assert.equal(app.reminderEvents().length,2);
  assert.doesNotMatch(nodes.get('#root').innerHTML,/Ore 62/);
  context.window.appTab('finance');assert.equal(S.tab,'sites');
  finishLoad();await changing;assert.equal(S.loading,false);assert.equal(S.workspace,'two');
- console.log('PASS: hours, historical costs, calendar/finance separation, full job details, edit payload and idempotent retries');
+ console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, validation and failed-save retries');
 })().catch(e=>{console.error(e);process.exitCode=1});
