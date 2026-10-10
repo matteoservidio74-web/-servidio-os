@@ -92,7 +92,16 @@ function siteTotals(s){
 }
 function sitesPage(){
  if(S.siteDetailId){const found=S.sites.find(x=>x.id===S.siteDetailId);if(found)return siteDetailPage(found);S.siteDetailId=null}
- const rows=S.sites.map(s=>{const t=siteTotals(s),mismatch=Math.abs(t.registeredReceived-t.receiptTotal)>.009,complete=s.data_completeness==='complete';return `<button class="item site-card" onclick="appSite('${s.id}')"><div><b>${esc(s.client_name||s.name)}</b><small>${esc([s.location,s.name].filter(Boolean).join(' · '))}<br>Incassato ${money(t.registeredReceived)} · Ore ${t.workedHours} · Costi ${money(t.totalCosts)}</small><span class="badge ${complete?'':'gray'}">${complete?'Dati completi':'Da completare'}</span> <span class="badge ${mismatch?'red':'gray'}">${mismatch?'Incassi da verificare':'Incassi verificati'}</span></div><span class="value">Apri ›</span></button>`}).join('');return `<div class="pagehead"><h1>Cantieri</h1><p>Incassi, ore, operai, spese e controlli per ogni lavoro. I dati sono separati per azienda: cambia azienda dal menu verde in alto.</p></div><div class="card">${rows||'<div class="empty">Nessun cantiere</div>'}</div><div class="notice">Il controllo confronta l’incassato nella scheda con la somma delle ricevute registrate. “Dati da completare” indica lo stato già presente nell’archivio.</div>`
+ const groups=[
+  {title:'Cantieri da iniziare',sites:S.sites.filter(s=>s.status==='planned'),empty:'Nessun cantiere da iniziare'},
+  {title:'Cantieri in corso',sites:S.sites.filter(s=>!['planned','completed','archived'].includes(s.status)),empty:'Nessun cantiere in corso'},
+  {title:'Cantieri completati',sites:S.sites.filter(s=>['completed','archived'].includes(s.status)),empty:'Nessun cantiere completato'}
+ ];
+ const sections=groups.map(group=>{
+  const rows=group.sites.map(s=>{const t=siteTotals(s),mismatch=Math.abs(t.registeredReceived-t.receiptTotal)>.009,complete=s.data_completeness==='complete';return `<button class="item site-card" onclick="appSite('${s.id}')"><div><b>${esc(s.client_name||s.name)}</b><small>${esc([s.location,s.name].filter(Boolean).join(' · '))}<br>Incassato ${money(t.registeredReceived)} · Ore ${t.workedHours} · Costi ${money(t.totalCosts)}</small>${s.status==='paused'?'<span class="badge gray">In pausa</span> ':''}${s.status==='archived'?'<span class="badge gray">Archiviato</span> ':''}<span class="badge ${complete?'':'gray'}">${complete?'Dati completi':'Dati da completare'}</span> <span class="badge ${mismatch?'red':'gray'}">${mismatch?'Incassi da verificare':'Incassi verificati'}</span></div><span class="value">Apri ›</span></button>`}).join('');
+  return `<div class="sectiontitle"><h2>${group.title}</h2><small>${group.sites.length} ${group.sites.length===1?'cantiere':'cantieri'}</small></div><div class="card">${rows||`<div class="empty">${group.empty}</div>`}</div>`;
+ }).join('');
+ return `<div class="pagehead"><h1>Cantieri</h1><p>Incassi, ore, operai, spese e controlli per ogni lavoro. I dati sono separati per azienda: cambia azienda dal menu verde in alto.</p></div>${sections}<div class="notice">Il controllo confronta l’incassato nella scheda con la somma delle ricevute registrate. “Dati da completare” indica lo stato già presente nell’archivio.</div>`
 }
 function siteDetailPage(s){
  const t=siteTotals(s),h=t.workedHours,contract=Number(s.contract_value||0),checks=[];
