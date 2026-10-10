@@ -7,7 +7,7 @@ const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 new vm.Script(script); // Validate the complete production script, including startup.
 const source = script.replace(/sb\.auth\.onAuthStateChange\([\s\S]*?\n\}\)\(\);/, `
 globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,home,finance,workedHours,
- adjustmentDay,jobPlan,programEvents,programRows,week,weekDays,addPage,submit,
+ adjustmentDay,jobPlan,programEvents,programRows,week,weekDays,weekOffsetFor,addPage,submit,render,
  setLoad:fn=>{load=fn}};
 })();`);
 const nodes = new Map();
@@ -76,6 +76,9 @@ assert.doesNotMatch(app.week(),/Acconto previsto Cliente Esempio B/);
 assert.equal((app.week().split('Lavori in corso')[0].match(/Inizio lavoro — Cliente Esempio A/g)||[]).length,1);
 assert.deepEqual(Array.from(app.weekDays()),['2026-10-05','2026-10-06','2026-10-07','2026-10-08','2026-10-09','2026-10-10','2026-10-11']);
 S.weekOffset=1;assert.equal(app.weekDays()[0],'2026-10-12');S.weekOffset=0;
+assert.equal(app.weekOffsetFor('2026-10-14'),1);
+assert.equal(app.weekOffsetFor('2026-10-11'),0);
+assert.equal(app.weekOffsetFor('2026-10-04'),-1);
 S.form='event';S.editScheduleId='job';
 let formHtml=app.addPage();
 for(const pair of [['expected_amount','2500'],['total_amount','4500'],['planned_hours','16'],['estimated_cost','300'],['crew','Operaio A, Operaio B']])assert.ok(formHtml.includes(`name="${pair[0]}" type=`)&&formHtml.includes(`value="${pair[1]}"`));
@@ -100,5 +103,14 @@ assert.equal(app.jobPlan(S.schedule[0]).expected_amount,2500); // Even with canc
  await app.submit({preventDefault(){},currentTarget:form});
  assert.equal(calls[2].args.p_schedule_id,id);
  assert.equal(S.draftScheduleId,null);
+ // The old company's financial records must not remain clickable during a switch.
+ S.workspaces=[{id:'one',name:'Example One'},{id:'two',name:'Example Two'}];S.workspace='one';S.tab='sites';
+ let finishLoad;app.setLoad(()=>new Promise(resolve=>{finishLoad=resolve}));
+ const changing=context.window.appWorkspace('two');
+ assert.equal(S.loading,true);
+ assert.match(nodes.get('#root').innerHTML,/Caricamento azienda/);
+ assert.doesNotMatch(nodes.get('#root').innerHTML,/Ore 62/);
+ context.window.appTab('finance');assert.equal(S.tab,'sites');
+ finishLoad();await changing;assert.equal(S.loading,false);assert.equal(S.workspace,'two');
  console.log('PASS: hours, historical costs, calendar/finance separation, full job details, edit payload and idempotent retries');
 })().catch(e=>{console.error(e);process.exitCode=1});
