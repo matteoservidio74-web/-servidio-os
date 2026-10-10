@@ -92,7 +92,7 @@ function closeDetail(){const m=document.getElementById('fd-modal');if(m)m.hidden
 
 function ensure(){let d=document.getElementById('servidio-finance-home');if(!d){d=document.createElement('section');d.id='servidio-finance-home';d.hidden=true;document.body.appendChild(d);d.addEventListener('click',async e=>{if(e.target?.closest('#fd-refresh')){d.innerHTML='<div class="fd-loading">Aggiorno…</div>';S.at=0;d.innerHTML=render(await load(true));position();return}const detail=e.target?.closest('[data-detail]');if(detail){openDetail(detail.dataset.detail);return}if(e.target?.closest('[data-close-detail]')||e.target?.id==='fd-modal')closeDetail()})}return d}
 function position(){const d=document.getElementById('servidio-finance-home');if(!d||d.hidden)return;d.style.top=`${headerBottom()}px`;d.style.bottom=`${Math.max(74,innerHeight-navTop())}px`}
-async function show(){const d=ensure();d.hidden=false;position();if(!S.data)d.innerHTML='<div class="fd-loading">Caricamento dashboard…</div>';d.innerHTML=render(await load(false));position()}
+async function show(){const d=ensure();const wasHidden=d.hidden;d.hidden=false;position();if(!wasHidden&&d.querySelector('.fd-head'))return;if(!S.data)d.innerHTML='<div class="fd-loading">Caricamento dashboard…</div>';const data=await load(false);if(d.hidden)return;d.innerHTML=render(data);position()}
 function hide(){const d=document.getElementById('servidio-finance-home');if(d)d.hidden=true}
 function sync(){const isHome=[...document.querySelectorAll('h1,h2,h3,span,div')].some(el=>visible(el)&&el.getBoundingClientRect().top<280&&norm(el.textContent)==='Oggi');if(isHome){S.forced=null;show().catch(console.error)}else if(S.forced===true||detectHome()){show().catch(console.error)}else hide()}
 
