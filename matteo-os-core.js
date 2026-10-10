@@ -93,15 +93,15 @@ async function undoLastSafe(){const {data:links}=await sb.from('assistant_action
 async function processInput(text){
   const mode=isQuestion(text)?'ask':'capture',result=await callAI(text,mode);
   if(mode==='ask')return{...result,executed:[]};
-  let review=!!result.needs_review;const refs=[];
+  let review=!!result.needs_review;const refs=[];let successfulActions=0;
   if(result.command==='delete_last'||result.command==='replace_last'){const ok=await undoLastSafe();if(!ok)review=true}
   for(const a of normalizeActions(result.actions)){
     if(Number(a.confidence??1)<0.6){review=true;continue}
-    try{const ref=await applyAction(a);if(ref?.id)refs.push(ref)}catch(e){console.warn('Matteo OS action failed',a?.type,e);review=true}
+    try{const ref=await applyAction(a);if(ref?.ok===true&&ref?.updated===0){review=true;continue}if(ref?.id||ref?.ok===true)successfulActions++;if(ref?.id)refs.push(ref)}catch(e){console.warn('Matteo OS action failed',a?.type,e);review=true}
   }
   const {data:inbox,error}=await sb.from('assistant_inbox').insert({user_id:S.user.id,workspace_id:S.workspace,source:'voice',raw_text:text,interpreted:{...result,executed:refs.map(x=>x.table)},status:review?'needs_review':'processed'}).select('id').single();
   if(!error&&inbox?.id&&refs.length){await sb.from('assistant_action_links').insert(refs.map(r=>({inbox_id:inbox.id,user_id:S.user.id,workspace_id:S.workspace,entity_table:r.table,entity_id:r.id})))}
-  S.dataAt=0;await refreshData(true);return{...result,needs_review:review,executed:refs.map(x=>x.table)};
+  S.dataAt=0;await refreshData(true);return{...result,reply:review||!successfulActions?'Non ho potuto confermare tutte le registrazioni nel database. Verifica il dettaglio prima di considerarle salvate.':result.reply,needs_review:review||!successfulActions,executed:refs.map(x=>x.table)};
 }
 
 function actionMenu(table,id,editable=true){if(!id||!table)return'';return `<button class="mos-more" data-op="toggle" aria-label="Azioni">•••</button><div class="mos-menu"><button data-op="edit" data-table="${table}" data-id="${id}" ${editable?'':'disabled'}>Modifica</button>${table==='personal_items'?`<button data-op="done" data-table="${table}" data-id="${id}">Segna fatto</button>`:''}<button class="danger" data-op="delete" data-table="${table}" data-id="${id}">Elimina</button></div>`}
