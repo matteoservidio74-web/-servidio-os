@@ -7,14 +7,15 @@ const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 new vm.Script(script); // Validate the complete production script, including startup.
 const source = script.replace(/sb\.auth\.onAuthStateChange\([\s\S]*?\n\}\)\(\);/, `
 globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,home,finance,workedHours,
- adjustmentDay,jobPlan,programEvents,programRows,week,weekDays,weekOffsetFor,addPage,submit,render,
+ adjustmentDay,jobPlan,programEvents,programRows,week,weekDays,weekOffsetFor,reminderEvents,remindersAndMaterials,addPage,submit,render,
  setLoad:fn=>{load=fn}};
 })();`);
 const nodes = new Map();
 const calls = [];
+const inserts = [];
 class FixedDate extends Date {constructor(...args){super(...(args.length?args:['2026-10-10T12:00:00Z']))}static now(){return new Date('2026-10-10T12:00:00Z').getTime()}}
 let rpcError = null;
-const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcError}}};
+const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcError}},from:table=>({insert:async row=>{inserts.push({table,row});return {error:null}}})};
 const context = vm.createContext({
  window:{supabase:{createClient:()=>sb}},
  document:{querySelector:s=>{if(!nodes.has(s))nodes.set(s,{innerHTML:'',textContent:'',addEventListener(){},classList:{add(){},remove(){}}});return nodes.get(s)}},
@@ -85,6 +86,20 @@ for(const pair of [['expected_amount','2500'],['total_amount','4500'],['planned_
 assert.doesNotMatch(formHtml,/name="invoiceable" value="true" checked/);
 assert.equal(app.jobPlan(S.schedule[0]).expected_amount,2500); // Even with cancelled financial forecast.
 
+// Bottom of Programma contains tasks and the same purchase requests saved by Da comprare.
+S.items.push({id:'undated',item_type:'task',status:'open',title:'Telefonare al cliente senza scadenza'});
+S.materials=[
+ {id:'purchase-request',site_id:'giusy',status:'requested',item:'Rasante da acquistare',quantity:5,unit:'sacchi',note:'Per la fase 1'},
+ {id:'already-bought',site_id:'giusy',status:'purchased',item:'Materiale già acquistato'}
+];
+const programHtml=app.week();
+assert.doesNotMatch(programHtml,/Prossimi impegni/);
+const lowerSection=programHtml.slice(programHtml.indexOf('<h2>Promemoria e materiali</h2>'));
+for(const text of ['Ordina rasante','Telefonare al cliente senza scadenza','Senza scadenza','Rasante da acquistare','5 sacchi','Per la fase 1','Cliente Esempio A'])assert.ok(lowerSection.includes(text),text);
+assert.doesNotMatch(lowerSection,/Inizio lavoro|Acconto previsto|Materiale già acquistato/);
+assert.match(programHtml,/Lavori da iniziare/);assert.match(programHtml,/Lavori in corso/);assert.match(programHtml,/Calendario della settimana/);
+assert.equal(app.reminderEvents().length,2);
+
 (async()=>{
  app.setLoad(async()=>{});
  const button={disabled:false,textContent:''},form={data:{schedule_date:'2026-10-11',time:'08:00',site_id:'giusy',contact_name:'Cliente Esempio A',title:'Inizio lavoro',notes:'Fase 1',crew:'Operaio A',planned_hours:'16',estimated_cost:'300',expected_amount:'2500',total_amount:'4500'},querySelector:()=>button};
@@ -103,6 +118,13 @@ assert.equal(app.jobPlan(S.schedule[0]).expected_amount,2500); // Even with canc
  await app.submit({preventDefault(){},currentTarget:form});
  assert.equal(calls[2].args.p_schedule_id,id);
  assert.equal(S.draftScheduleId,null);
+ S.form='material';
+ form.data={item:'Rasante da acquistare',site_id:'giusy',quantity:'5',unit:'sacchi',note:'Per la fase 1'};
+ await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(inserts[0].table,'material_requests');
+ assert.equal(inserts[0].row.site_id,'giusy');assert.equal(inserts[0].row.quantity,5);assert.equal(inserts[0].row.status,'requested');
+ assert.equal(S.tab,'week');
+ assert.match(app.addPage(),/Programma → Promemoria e materiali/);
  // The old company's financial records must not remain clickable during a switch.
  S.workspaces=[{id:'one',name:'Example One'},{id:'two',name:'Example Two'}];S.workspace='one';S.tab='sites';
  let finishLoad;app.setLoad(()=>new Promise(resolve=>{finishLoad=resolve}));
