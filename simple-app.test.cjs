@@ -18,13 +18,14 @@ const loggedErrors = [];
 const materialRecords = new Map();
 let updateError = null;
 let confirmResult = true;
+let promptAnswers=[];const promptDefaults=[];
 class FixedDate extends Date {constructor(...args){super(...(args.length?args:['2026-10-10T12:00:00Z']))}static now(){return new Date('2026-10-10T12:00:00Z').getTime()}}
 let rpcError = null;
 const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcError}},from:table=>({
  insert:async row=>{inserts.push({table,row});return {error:null}},
  update:row=>{
   const filters=[];
-  const query={eq:(key,value)=>{filters.push([key,value]);return query},select:()=>query,maybeSingle:async()=>{
+  const query={then:(resolve,reject)=>query.maybeSingle().then(resolve,reject),eq:(key,value)=>{filters.push([key,value]);return query},select:()=>query,maybeSingle:async()=>{
    updates.push({table,row,filters});
    if(updateError)return {data:null,error:updateError};
    const found=Array.from(materialRecords.values()).find(record=>filters.every(([key,value])=>record[key]===value));
@@ -37,7 +38,7 @@ const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcErro
 const context = vm.createContext({
  window:{supabase:{createClient:()=>sb}},
  document:{querySelector:s=>{if(!nodes.has(s))nodes.set(s,{innerHTML:'',textContent:'',addEventListener(){},classList:{add(){},remove(){}}});return nodes.get(s)}},
- Intl,Date:FixedDate,console:{...console,error:e=>loggedErrors.push(e?.message)},setTimeout:()=>0,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000123'},confirm:()=>confirmResult,
+ Intl,Date:FixedDate,console:{...console,error:e=>loggedErrors.push(e?.message)},setTimeout:()=>0,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000123'},confirm:()=>confirmResult,prompt:(label,value)=>{promptDefaults.push({label,value});return promptAnswers.shift()},
  FormData:class {constructor(form){this.data=form.data}entries(){return Object.entries(this.data)}}
 });
 vm.runInContext(source,context);
@@ -254,6 +255,39 @@ assert.equal(app.reminderEvents().length,2);
  assert.equal(inserts.length,validLaborInserts);
  form.data.site_id=s.id;form.data.hours='25';await app.submit({preventDefault(){},currentTarget:form});
  assert.equal(inserts.length,validLaborInserts);
+ // A reminder can have no date, and must remain outside the calendar after create and edit.
+ S.form='reminder';S.tab='add';S.items=[];app.setLoad(async()=>{});
+ const reminderForm=app.addPage(),dateInput=reminderForm.match(/<input name="reminder_date"[^>]*>/)[0];
+ assert.match(reminderForm,/Giorno \(facoltativo\)/);assert.doesNotMatch(dateInput,/required/);
+ assert.match(dateInput,/value=""/);
+ form.data={reminder_date:'',time:'',site_id:'',title:'Telefonare al fornitore',details:'Chiedere disponibilità'};
+ await app.submit({preventDefault(){},currentTarget:form});
+ let reminder={id:'new-reminder',...inserts.at(-1).row};
+ assert.equal(inserts.at(-1).table,'personal_items');assert.equal(reminder.due_at,null);assert.equal(reminder.remind_at,null);
+ S.items=[reminder];
+ assert.equal(app.programEvents().filter(x=>x.id===reminder.id).length,0);
+ assert.match(app.remindersAndMaterials(),/Telefonare al fornitore/);
+ assert.match(app.remindersAndMaterials(),/Senza scadenza/);
+ for(const action of ['appEditItem','appCompleteItem','appDeleteItem'])assert.ok(app.remindersAndMaterials().includes(action+"('new-reminder')"));
+ // Dated reminders still appear on the selected day, with an optional time.
+ form.data.reminder_date='2026-10-12';await app.submit({preventDefault(){},currentTarget:form});
+ reminder={id:'dated-reminder',...inserts.at(-1).row};S.items=[reminder];
+ assert.equal(app.programEvents().find(x=>x.id===reminder.id).date,'2026-10-12');assert.equal(reminder.remind_at,null);
+ form.data.time='08:30';await app.submit({preventDefault(){},currentTarget:form});
+ reminder={id:'timed-reminder',...inserts.at(-1).row};S.items=[reminder];
+ assert.ok(reminder.remind_at);assert.equal(app.programEvents().find(x=>x.id===reminder.id).date,'2026-10-12');
+ const validReminderInserts=inserts.length;form.data.reminder_date='';await app.submit({preventDefault(){},currentTarget:form});
+ assert.equal(inserts.length,validReminderInserts);assert.equal(loggedErrors.at(-1),'Per indicare un’ora, scegli anche il giorno');
+ // Removing the date clears both timestamps; editing an undated note does not add today's date.
+ materialRecords.set('timed-reminder',reminder);
+ app.setLoad(async()=>{S.items=[{...materialRecords.get('timed-reminder')}]});
+ promptAnswers=['Titolo aggiornato','','Dettagli aggiornati'];await context.window.appEditItem('timed-reminder');
+ assert.equal(materialRecords.get('timed-reminder').due_at,null);assert.equal(materialRecords.get('timed-reminder').remind_at,null);
+ promptAnswers=['Solo una nota','','Altri dettagli'];await context.window.appEditItem('timed-reminder');
+ assert.equal(promptDefaults.at(-2).value,'');
+ assert.equal(materialRecords.get('timed-reminder').due_at,null);
+ assert.match(app.remindersAndMaterials(),/Solo una nota/);assert.equal(app.programEvents().filter(x=>x.id==='timed-reminder').length,0);
+ app.setLoad(async()=>{});
  // The old company's financial records must not remain clickable during a switch.
  S.workspaces=[{id:'one',name:'Example One'},{id:'two',name:'Example Two'}];S.workspace='one';S.tab='sites';
  let finishLoad;app.setLoad(()=>new Promise(resolve=>{finishLoad=resolve}));
@@ -263,5 +297,5 @@ assert.equal(app.reminderEvents().length,2);
  assert.doesNotMatch(nodes.get('#root').innerHTML,/Ore 62/);
  context.window.appTab('finance');assert.equal(S.tab,'sites');
  finishLoad();await changing;assert.equal(S.loading,false);assert.equal(S.workspace,'two');
- console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, fixed team prices, payment states, validation and failed-save retries');
+ console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, fixed team prices, payment states, undated reminders, validation and failed-save retries');
 })().catch(e=>{console.error(e);process.exitCode=1});
