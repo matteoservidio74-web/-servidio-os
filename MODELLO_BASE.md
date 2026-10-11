@@ -1,4 +1,4 @@
-# Servidio OS — modello base approvato, 10 ottobre 2026
+# Servidio OS — modello base approvato, 11 ottobre 2026
 
 Matteo approva la struttura attuale come base da conservare e aggiornare gradualmente.
 Continuare sull'app esistente, allo stesso indirizzo e con gli stessi dati cloud.
@@ -32,3 +32,19 @@ Non richiedere una reinstallazione per gli aggiornamenti.
 - Sviluppo ordinario: branch `main`, pagina `nuova-semplice-accesso.html`.
 
 Le versioni di riferimento conservano il codice. I dati operativi restano nel database esistente e non vengono riportati indietro quando si consulta una versione precedente.
+
+## Modello funzionante approvato — 11 ottobre 2026
+
+Matteo conferma che l'app funziona alla grande e richiede di conservare questa versione come base per tutti i prossimi aggiornamenti.
+
+- Riferimento da conservare: branch `modello-base-2026-10-11`, commit `96eaec2fac04d96d3cb91d156bfcc525bbec3cee`.
+- Pubblicazione verificata: produzione Vercel `dpl_7mjJiknu4Aw66VUz9u25kBttv2W7`, pagina `nuova-semplice-accesso.html`.
+- Cantieri separati in Da iniziare, In corso e Completati.
+- Materiali e promemoria con modifica, completamento ed eliminazione.
+- Incassi: Acconto, Saldo e Altro; fattura associata facoltativa, con visualizzazione Non fatturato.
+- Ore operai: costo totale a prezzo fisso facoltativo, conservando le ore lavorate. Un prezzo fisso sostituisce il calcolo orario e non va duplicato tra le spese.
+- Stati Da pagare e Già pagato coerenti con costi del cantiere e riepiloghi.
+- Calendario per lavorazioni giornaliere di cantieri esistenti, squadra e dettagli. Ore previste totali della squadra separate dalle ore effettive. La fine dell'orario viene attualmente indicata nei dettagli.
+- Copia separata dei dati operativi delle due aziende acquisita l'11 ottobre 2026. Allegati esterni conservati come riferimenti; questa copia non contiene i file binari né credenziali.
+- Non aggiornare il branch di riferimento. Tutte le modifiche successive vanno sul branch main; conservare anche le basi del 10 ottobre.
+- Una eventuale consultazione o ripristino del codice non deve riportare indietro o sovrascrivere i dati operativi correnti.
