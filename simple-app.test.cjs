@@ -6,7 +6,7 @@ const html = fs.readFileSync('nuova-semplice-accesso.html', 'utf8');
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 new vm.Script(script); // Validate the complete production script, including startup.
 const source = script.replace(/sb\.auth\.onAuthStateChange\([\s\S]*?\n\}\)\(\);/, `
-globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,home,finance,workedHours,
+globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,siteSelect,home,finance,workedHours,
  adjustmentDay,jobPlan,programEvents,programRows,week,weekDays,weekOffsetFor,reminderEvents,remindersAndMaterials,addPage,submit,render,
  setLoad:fn=>{load=fn}};
 })();`);
@@ -17,11 +17,11 @@ const updates = [];
 const loggedErrors = [];
 const materialRecords = new Map();
 let updateError = null;
-let confirmResult = true;
+let confirmResult = true;const confirmMessages=[];
 let promptAnswers=[];const promptDefaults=[];
 class FixedDate extends Date {constructor(...args){super(...(args.length?args:['2026-10-10T12:00:00Z']))}static now(){return new Date('2026-10-10T12:00:00Z').getTime()}}
 let rpcError = null;
-const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcError}},from:table=>({
+const sb = {rpc:async(name,args)=>{calls.push({name,args});if(name==='delete_simple_sites'&&!rpcError){const ids=args.p_site_ids||[],state=context.testApp?.S;for(const site of state?.sites||[])if(ids.includes(site.id))site.deleted_at='2026-10-14T05:43:00Z';for(const item of state?.items||[])if(ids.includes(item.site_id)&&!['cancelled','done'].includes(item.status))item.status='cancelled';for(const event of state?.schedule||[])if(ids.includes(event.site_id)&&!['cancelled','done'].includes(event.status))event.status='cancelled';return {data:{deleted_sites:ids.length},error:null}}return {data:null,error:rpcError}},from:table=>({
  insert:async row=>{inserts.push({table,row});return {error:null}},
  update:row=>{
   const filters=[];
@@ -38,10 +38,10 @@ const sb = {rpc:async(name,args)=>{calls.push({name,args});return {error:rpcErro
 const context = vm.createContext({
  window:{supabase:{createClient:()=>sb}},
  document:{querySelector:s=>{if(!nodes.has(s))nodes.set(s,{innerHTML:'',textContent:'',addEventListener(){},classList:{add(){},remove(){}}});return nodes.get(s)}},
- Intl,Date:FixedDate,console:{...console,error:e=>loggedErrors.push(e?.message)},setTimeout:()=>0,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000123'},confirm:()=>confirmResult,prompt:(label,value)=>{promptDefaults.push({label,value});return promptAnswers.shift()},
+ Intl,Date:FixedDate,console:{...console,error:e=>loggedErrors.push(e?.message)},setTimeout:()=>0,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000123'},confirm:message=>{confirmMessages.push(message);return confirmResult},prompt:(label,value)=>{promptDefaults.push({label,value});return promptAnswers.shift()},
  FormData:class {constructor(form){this.data=form.data}entries(){return Object.entries(this.data)}}
 });
-vm.runInContext(source,context);
+ vm.runInContext(source,context);
 const app=context.testApp,S=app.S;
 const s={id:'valentina',name:'Cantiere esempio',client_name:'Cantiere esempio',status:'active',contract_value:11745.23,collected_amount:0};
 S.sites=[s];S.user={id:'owner'};S.workspace='jessica';
@@ -327,5 +327,17 @@ assert.equal(app.reminderEvents().length,2);
  assert.doesNotMatch(nodes.get('#root').innerHTML,/Ore 62/);
  context.window.appTab('finance');assert.equal(S.tab,'sites');
  finishLoad();await changing;assert.equal(S.loading,false);assert.equal(S.workspace,'two');
- console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, fixed team prices with or without hours, payment states, undated reminders, validation and failed-save retries');
+ // Cantieri are selected explicitly. Deleting a duplicate hides only that site and closes its open plan items.
+ const duplicate={id:'puzzolo-duplicate',name:'Cliente esempio X',client_name:'Cliente esempio X',status:'planned',workspace_id:'two'};S.sites.push(duplicate);S.items=[{id:'forecast-example',site_id:duplicate.id,status:'open',item_type:'receivable'}];S.schedule=[{id:'duplicate-job',site_id:duplicate.id,status:'planned'}];S.tab='sites';
+ assert.match(app.sitesPage(),/Seleziona cantieri/);assert.match(app.siteSelect(true),/Cliente esempio X/);
+ context.window.appToggleSiteSelection();context.window.appSelectSite(duplicate.id,true);
+ assert.match(app.sitesPage(),/Elimina selezionati \(1\)/);assert.match(app.sitesPage(),/Seleziona/);
+ confirmResult=false;const callsBeforeDelete=calls.length;await context.window.appDeleteSelectedSites();
+ assert.equal(calls.length,callsBeforeDelete);assert.equal(duplicate.deleted_at,undefined);
+ confirmResult=true;await context.window.appDeleteSelectedSites();
+ assert.equal(calls.at(-1).name,'delete_simple_sites');assert.equal(calls.at(-1).args.p_workspace_id,'two');assert.deepEqual(Array.from(calls.at(-1).args.p_site_ids),[duplicate.id]);
+ assert.ok(duplicate.deleted_at);assert.equal(S.items[0].status,'cancelled');assert.equal(S.schedule[0].status,'cancelled');
+ assert.doesNotMatch(app.sitesPage(),/Cliente esempio X/);assert.doesNotMatch(app.siteSelect(),/Cliente esempio X/);
+ assert.match(confirmMessages.at(-1),/Cliente esempio X/);assert.match(confirmMessages.at(-1),/storici e finanziari restano conservati/);
+ console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, selected site deletion with history preservation, fixed team prices with or without hours, payment states, undated reminders, validation and failed-save retries');
 })().catch(e=>{console.error(e);process.exitCode=1});
