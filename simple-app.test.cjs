@@ -1,12 +1,14 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+let suiteFinished=false;
+process.on('beforeExit',()=>{if(!suiteFinished){console.error('FAIL: regression suite did not finish');process.exitCode=1}});
 
 const html = fs.readFileSync('nuova-semplice-accesso.html', 'utf8');
 const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
 new vm.Script(script); // Validate the complete production script, including startup.
 const source = script.replace(/sb\.auth\.onAuthStateChange\([\s\S]*?\n\}\)\(\);/, `
-globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,siteSelect,home,finance,workedHours,
+globalThis.testApp = {S,siteTotals,sitesPage,siteDetailPage,siteSelect,home,finance,workedHours,receiptLabel,receiptInvoices,receiptInvoiceOptions,receiptsToInvoice,
  adjustmentDay,jobPlan,programEvents,programRows,week,weekDays,weekOffsetFor,reminderEvents,remindersAndMaterials,addPage,submit,render,
  setLoad:fn=>{load=fn}};
 })();`);
@@ -197,7 +199,8 @@ assert.equal(app.reminderEvents().length,2);
  const receiptForm=app.addPage();
  assert.match(receiptForm,/value="advance">Acconto/);
  assert.match(receiptForm,/value="balance">Saldo/);
- assert.match(receiptForm,/value="">Non fatturato/);
+ assert.match(receiptForm,/value="" selected>Non fatturato/);
+ assert.match(receiptForm,/value="__to_invoice__"[^>]*>Da fatturare/);
  assert.doesNotMatch(receiptForm,/value="deposit"|value="invoice"/);
  form.data={received_date:'2026-10-11',amount:'2700',site_id:s.id,receipt_type:'advance',invoice_id:'',note:'Acconto'};
  await app.submit({preventDefault(){},currentTarget:form});
@@ -217,6 +220,23 @@ assert.equal(app.reminderEvents().length,2);
  S.receipts=[{...inserts.at(-1).row}];assert.match(app.siteDetailPage(s),/Saldo · Fatturato/);
  form.data.invoice_id='foreign-invoice';await app.submit({preventDefault(){},currentTarget:form});
  assert.equal(inserts.length,receiptInsertCount+1);
+ // An actual advance for a billable job can await its invoice; it is not an issued invoice or a future receipt.
+ const billableSite={id:'billable-example',name:'Cliente fatturabile esempio',client_name:'Cliente fatturabile esempio',status:'planned',contract_value:1000,collected_amount:600};S.sites.push(billableSite);
+ S.schedule.push({id:'billable-job-example',site_id:billableSite.id,schedule_date:'2026-10-19',title:'Inizio lavoro esempio',status:'planned',metadata:{invoiceable:true}});
+ const invoiceField=context.document.querySelector('#receipt-invoice');invoiceField.value='example-invoice';
+ context.window.appReceiptSiteChanged(billableSite.id);
+ assert.equal(invoiceField.value,'__to_invoice__');assert.doesNotMatch(invoiceField.innerHTML,/example-invoice/);
+ assert.match(nodes.get('#receipt-invoice-hint').textContent,/non ci sono fatture emesse/);
+ const invoiceCount=S.invoices.length;
+ form.data={received_date:'2026-10-14',amount:'600',site_id:billableSite.id,receipt_type:'advance',invoice_id:'__to_invoice__',note:'Acconto da fatturare'};
+ await app.submit({preventDefault(){},currentTarget:form});
+ const pendingReceipt={id:'pending-receipt-example',...inserts.at(-1).row};
+ assert.equal(inserts.at(-1).table,'cash_receipts');assert.equal(pendingReceipt.invoice_id,null);assert.equal(pendingReceipt.invoice_required,true);assert.equal(pendingReceipt.amount,600);
+ assert.equal(S.invoices.length,invoiceCount);S.receipts=[pendingReceipt];
+ assert.match(app.receiptsToInvoice(),/Incassi da fatturare/);assert.match(app.receiptsToInvoice(),/Già incassato/);
+ assert.match(app.finance(),/Incassi da fatturare/);assert.match(app.siteDetailPage(billableSite),/Acconto · Da fatturare/);
+ assert.equal(app.receiptLabel({...pendingReceipt,invoice_id:'issued-invoice'}),'Acconto · Fatturato');
+ form.data.invoice_id='';await app.submit({preventDefault(){},currentTarget:form});assert.equal(inserts.at(-1).row.invoice_required,false);
  assert.deepEqual(loggedErrors.slice(-2),['Seleziona Acconto, Saldo o Altro','Seleziona una fattura del cantiere indicato']);
  // A fixed team price replaces hourly multiplication while preserving hours and payment state.
  S.form='hours';S.hours=[];S.laborAdjustments=[];S.costs=[];S.receipts=[];S.invoices=[];
@@ -327,6 +347,7 @@ assert.equal(app.reminderEvents().length,2);
  assert.doesNotMatch(nodes.get('#root').innerHTML,/Ore 62/);
  context.window.appTab('finance');assert.equal(S.tab,'sites');
  finishLoad();await changing;assert.equal(S.loading,false);assert.equal(S.workspace,'two');
+ app.setLoad(async()=>{});
  // Cantieri are selected explicitly. Deleting a duplicate hides only that site and closes its open plan items.
  const duplicate={id:'puzzolo-duplicate',name:'Cliente esempio X',client_name:'Cliente esempio X',status:'planned',workspace_id:'two'};S.sites.push(duplicate);S.items=[{id:'forecast-example',site_id:duplicate.id,status:'open',item_type:'receivable'}];S.schedule=[{id:'duplicate-job',site_id:duplicate.id,status:'planned'}];S.tab='sites';
  assert.match(app.sitesPage(),/Seleziona cantieri/);assert.match(app.siteSelect(true),/Cliente esempio X/);
@@ -339,5 +360,6 @@ assert.equal(app.reminderEvents().length,2);
  assert.ok(duplicate.deleted_at);assert.equal(S.items[0].status,'cancelled');assert.equal(S.schedule[0].status,'cancelled');
  assert.doesNotMatch(app.sitesPage(),/Cliente esempio X/);assert.doesNotMatch(app.siteSelect(),/Cliente esempio X/);
  assert.match(confirmMessages.at(-1),/Cliente esempio X/);assert.match(confirmMessages.at(-1),/storici e finanziari restano conservati/);
- console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, selected site deletion with history preservation, fixed team prices with or without hours, payment states, undated reminders, validation and failed-save retries');
+ suiteFinished=true;
+ console.log('PASS: hours, historical costs, calendar/job details, material edit/complete/delete, company scope, selected site deletion with history preservation, fixed team prices with or without hours, payment states, pending-invoice receipts, undated reminders, validation and failed-save retries');
 })().catch(e=>{console.error(e);process.exitCode=1});
