@@ -13,11 +13,12 @@
 .site-main{width:100%;min-width:0}.site-pick{display:flex!important;align-items:center;gap:7px;color:var(--g);font-size:11px;font-weight:750;padding:4px 0 8px}.site-pick input{width:18px;height:18px;margin:0}.site-open{display:block;width:100%;border:0;background:transparent;color:inherit;text-align:left;font:inherit;padding:3px 0}.site-management{margin:-5px 0 12px}.site-management .site-delete{color:var(--red)}.site-management button:disabled{opacity:.45;cursor:default}
 </style></head>
 <body><div id="root"></div><div id="toast" class="toast"></div>
+<script src="/equipment.js"></script>
 <script>
 (()=>{'use strict';
 const URL='https://rdxaxsosqiudklhvezuq.supabase.co',KEY='sb_publishable_abewBdHybtalh7RsfWbXUA_oOLebqMn';
 const sb=window.supabase?.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-const S={user:null,workspaces:[],workspace:null,sites:[],hours:[],costs:[],laborAdjustments:[],schedule:[],calendarSchedule:null,calendarSites:null,calendarItems:null,receipts:[],invoices:[],materials:[],items:[],fiscalProfile:null,fiscalParams:null,deadlines:[],fiscalPayments:[],tab:'home',form:'hours',siteDetailId:null,siteSelectionMode:false,selectedSiteIds:[],editScheduleId:null,draftScheduleId:null,editMaterialId:null,weekOffset:0,loading:false};
+const S={user:null,workspaces:[],workspace:null,sites:[],hours:[],costs:[],laborAdjustments:[],schedule:[],calendarSchedule:null,calendarSites:null,calendarItems:null,receipts:[],invoices:[],materials:[],items:[],equipment:[],fiscalProfile:null,fiscalParams:null,deadlines:[],fiscalPayments:[],tab:'home',form:'hours',siteDetailId:null,siteSelectionMode:false,selectedSiteIds:[],editScheduleId:null,draftScheduleId:null,editMaterialId:null,weekOffset:0,loading:false};
 const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(n||0));
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -50,7 +51,7 @@ function login(){ $('#root').innerHTML=`<div class="authwrap"><div class="authca
 async function load(){
  const wid=S.workspace;
  const yr=Number(today().slice(0,4));
- const [sites,hours,costs,laborAdjustments,schedule,receipts,invoices,materials,items,profile,params,deadlines,payments]=await Promise.all([
+ const [sites,hours,costs,laborAdjustments,schedule,receipts,invoices,materials,items,equipment,profile,params,deadlines,payments]=await Promise.all([
  sb.from('sites').select('id,name,client_name,location,status,contract_value,invoiced_amount,collected_amount,data_completeness,planned_start_date,planned_end_date,estimated_workdays,workspace_id,deleted_at').eq('workspace_id',wid).order('name'),
  sb.from('time_entries').select('id,site_id,work_date,hours,hourly_cost,worker_name_snapshot,payable_hours,cost_amount_override,payment_status,is_payable,note').eq('workspace_id',wid).order('work_date',{ascending:false}).limit(5000),
  sb.from('cost_entries').select('id,site_id,category,description,amount,paid,due_date,entry_date').eq('workspace_id',wid).order('entry_date',{ascending:false}).limit(3000),
@@ -60,14 +61,15 @@ async function load(){
  sb.from('invoices').select('id,site_id,number,customer_name,issue_date,amount,collected_amount,status,notes').eq('workspace_id',wid).order('issue_date',{ascending:false}).limit(1000),
  sb.from('material_requests').select('id,site_id,item,quantity,unit,note,status,priority,created_at').eq('workspace_id',wid).eq('status','requested').order('created_at',{ascending:false}).limit(500),
  sb.from('personal_items').select('id,site_id,item_type,title,details,status,due_at,remind_at,scope,category,contact_name,amount,metadata').eq('user_id',S.user.id).eq('workspace_id',wid) .order('due_at',{ascending:true,nullsFirst:false}).limit(500),
+ sb.from('equipment_assets').select('id,workspace_id,name,current_site_id,location_kind,location_note,assigned_on,created_at').in('workspace_id',S.workspaces.map(x=>x.id)).order('name').limit(500),
  sb.from('fiscal_profiles').select('regime,start_date,profitability_coefficient,coefficient_confirmed,substitute_tax_rate,tax_rate_confirmed,social_security_scheme,inps_reduction_pct,start_year_limit_override,fixed_inps_installment_amount,fixed_inps_installment_months,notes').eq('workspace_id',wid).maybeSingle(),
  sb.from('fiscal_year_params').select('year,forfettario_limit,immediate_exit_limit').eq('year',yr).maybeSingle(),
  sb.from('deadlines').select('id,title,due_date,amount_due,amount_paid,status,category,notes').eq('workspace_id',wid).order('due_date').limit(200),
  sb.from('fiscal_payments').select('id,tax_year,category,description,due_date,amount_due,paid_amount,status').eq('workspace_id',wid).eq('tax_year',yr).order('due_date').limit(200)
  ]);
- for(const q of [sites,hours,costs,laborAdjustments,schedule,receipts,invoices,materials,items,profile,params,deadlines,payments])if(q.error)throw q.error;
+ for(const q of [sites,hours,costs,laborAdjustments,schedule,receipts,invoices,materials,items,equipment,profile,params,deadlines,payments])if(q.error)throw q.error;
  if(S.workspace!==wid)return; // A superseded workspace request must never replace current data.
- S.sites=sites.data||[];S.hours=hours.data||[];S.costs=costs.data||[];S.laborAdjustments=laborAdjustments.data||[];S.schedule=schedule.data||[];S.calendarSchedule=null;S.calendarSites=null;S.calendarItems=null;S.receipts=receipts.data||[];S.invoices=invoices.data||[];S.materials=materials.data||[];S.items=items.data||[];S.fiscalProfile=profile.data||null;S.fiscalParams=params.data||null;S.deadlines=deadlines.data||[];S.fiscalPayments=payments.data||[];
+ S.sites=sites.data||[];S.hours=hours.data||[];S.costs=costs.data||[];S.laborAdjustments=laborAdjustments.data||[];S.schedule=schedule.data||[];S.calendarSchedule=null;S.calendarSites=null;S.calendarItems=null;S.receipts=receipts.data||[];S.invoices=invoices.data||[];S.materials=materials.data||[];S.items=items.data||[];S.equipment=equipment.data||[];S.fiscalProfile=profile.data||null;S.fiscalParams=params.data||null;S.deadlines=deadlines.data||[];S.fiscalPayments=payments.data||[];
  const workspaceIds=S.workspaces.map(x=>x.id),[calendarSchedule,calendarSites,calendarItems]=await Promise.all([
   sb.from('company_schedule').select('id,workspace_id,site_id,schedule_date,scheduled_at,title,notes,status,metadata,updated_at').in('workspace_id',workspaceIds).neq('status','cancelled').order('schedule_date').limit(1000),
   sb.from('sites').select('id,workspace_id,name,client_name,deleted_at').in('workspace_id',workspaceIds).limit(2000),
@@ -77,8 +79,8 @@ async function load(){
  if(S.workspace!==wid)return;
  S.calendarSchedule=calendarSchedule.data||[];S.calendarSites=calendarSites.data||[];S.calendarItems=calendarItems.data||[];
 }
-function nav(){return `<nav class="nav">${[['home','⌂','Oggi'],['sites','▤','Cantieri'],['add','＋','Inserisci'],['finance','€','Finanze'],['week','▦','Programma']].map(([id,ic,n])=>`<button class="${S.tab===id?'on':''}" onclick="appTab('${id}')"><span>${ic}</span>${n}</button>`).join('')}</nav>`}
-function shell(content){const w=S.workspaces.find(x=>x.id===S.workspace);return `<div class="app"><header class="top"><div class="toprow"><div class="brand">SERVIDIO<small>GESTIONE SEMPLICE</small></div><select class="workselect" ${S.loading?'disabled':''} onchange="appWorkspace(this.value)">${S.workspaces.map(x=>`<option value="${x.id}" ${x.id===S.workspace?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div><div class="greet">${esc(S.user?.email||'Account')} · ${esc(w?.kind==='personal_company'?'azienda personale':'azienda')}</div><h1>${S.tab==='home'?'La tua giornata':S.tab==='sites'?'Cantieri':S.tab==='add'?'Inserisci':S.tab==='finance'?'Finanze':'Programma'}</h1><div class="sync">Dati aggiornati · <strong class="date-emphasis">${esc(dateLabel(today()))}</strong></div></header><main>${content}</main>${nav()}</div>`}
+function nav(){return `<nav class="nav">${[['home','⌂','Oggi'],['sites','▤','Cantieri'],['add','＋','Inserisci'],['finance','€','Finanze'],['week','▦','Programma'],['equipment','🧰','Attrezzi']].map(([id,ic,n])=>`<button class="${S.tab===id?'on':''}" onclick="appTab('${id}')"><span>${ic}</span>${n}</button>`).join('')}</nav>`}
+function shell(content){const w=S.workspaces.find(x=>x.id===S.workspace);return `<div class="app"><header class="top"><div class="toprow"><div class="brand">SERVIDIO<small>GESTIONE SEMPLICE</small></div><select class="workselect" ${S.loading?'disabled':''} onchange="appWorkspace(this.value)">${S.workspaces.map(x=>`<option value="${x.id}" ${x.id===S.workspace?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div><div class="greet">${esc(S.user?.email||'Account')} · ${esc(w?.kind==='personal_company'?'azienda personale':'azienda')}</div><h1>${S.tab==='home'?'La tua giornata':S.tab==='sites'?'Cantieri':S.tab==='add'?'Inserisci':S.tab==='finance'?'Finanze':S.tab==='equipment'?'Attrezzature':'Programma'}</h1><div class="sync">Dati aggiornati · <strong class="date-emphasis">${esc(dateLabel(today()))}</strong></div></header><main>${content}</main>${nav()}</div>`}
 function item(title,sub,right=''){const safeSub=esc(sub).replace(/(lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica)\s+\d{1,2}\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/giu,'<strong class="date-emphasis">$&</strong>');return `<div class="item"><div><b>${esc(title)}</b><small>${safeSub}</small></div><div class="value">${right}</div></div>`}
 function card(title,rows,action=''){return `<div class="sectiontitle"><h2>${title}</h2>${action}</div><div class="card">${rows||'<div class="empty">Nessun dato registrato</div>'}</div>`}
 function workedHours(hours,adjustments=[]){return Math.round([...hours,...adjustments].reduce((n,x)=>n+Number(x.hours||0),0)*100)/100}
@@ -224,7 +226,7 @@ function week(){
  const nav=`<div class="weeknav"><button class="secondary" onclick="appWeek(-1)" aria-label="Settimana precedente">‹</button><b>${dateLabel(visibleDays[0])} – ${dateLabel(visibleDays[visibleDays.length-1])}</b><button class="secondary" onclick="appWeek(1)" aria-label="Settimana successiva">›</button><button class="secondary" onclick="appWeek(0)">Oggi</button></div>`;
  return `<div class="pagehead"><h1>Programma</h1><p>Lavori e promemoria. Gli incassi previsti sono in Finanze.</p></div><div class="grid2"><button class="primary" onclick="appForm('event')">+ Lavoro / sopralluogo</button><button class="secondary" onclick="appForm('reminder')">+ Promemoria</button></div>${card('Lavori da iniziare',startingRows)}${card('Lavori in corso',activeRows)}<div class="sectiontitle"><h2>Calendario della settimana</h2><small>Include gli impegni di tutte le aziende</small></div>${nav}<div class="weekgrid">${calendar}</div>${remindersAndMaterials()}`;
 }
-function render(){let c=S.loading?'<div class="card"><b>Caricamento azienda…</b><p class="muted">Sto aggiornando cantieri, ore e programmi dell’azienda selezionata.</p></div>':S.tab==='home'?home():S.tab==='sites'?sitesPage():S.tab==='add'?addPage():S.tab==='finance'?finance():week();$('#root').innerHTML=shell(c);$('#entry')?.addEventListener('submit',submit)}
+function render(){let c=S.loading?'<div class="card"><b>Caricamento azienda…</b><p class="muted">Sto aggiornando cantieri, ore e programmi dell’azienda selezionata.</p></div>':S.tab==='home'?home():S.tab==='sites'?sitesPage():S.tab==='add'?addPage():S.tab==='finance'?finance():S.tab==='equipment'?window.ServidioEquipment.html(S):week();$('#root').innerHTML=shell(c);$('#entry')?.addEventListener('submit',submit)}
 async function submit(e){e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget).entries()),base={workspace_id:S.workspace};
  if(S.form==='material'&&S.editMaterialId){
   const btn=e.currentTarget.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Salvataggio…';
@@ -299,6 +301,7 @@ window.appCompleteItem=async id=>{try{const done=S.items.find(x=>x.id===id)?.sta
 window.appDeleteItem=async id=>{if(!confirm('Eliminare questo impegno?'))return;try{const {error}=await sb.from('personal_items').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',id);if(error)throw error;await load();render();toast('Impegno eliminato')}catch(e){pageError(e)}};
 window.appWorkspace=async id=>{if(S.loading||!S.workspaces.some(x=>x.id===id))return;const previous=S.workspace;S.workspace=id;S.editScheduleId=null;S.draftScheduleId=null;S.editMaterialId=null;S.siteDetailId=null;S.loading=true;render();try{await load();S.loading=false;render()}catch(e){S.workspace=previous;S.loading=false;render();pageError(e)}};
 window.appLogout=async()=>{await sb.auth.signOut();location.reload()};
+window.ServidioEquipment.bind({S,sb,load,render,toast,pageError,today});
 sb.auth.onAuthStateChange(()=>{});start().catch(e=>{console.error(e);$('#root').innerHTML=`<div class="authwrap"><div class="authcard"><h1>Errore nel caricamento</h1><p>Ricarica la pagina. Se continua, controlliamo accesso e connessione.</p><button class="secondary" onclick="location.reload()">Ricarica</button></div></div>`});
 })();
 </script></body></html>
